@@ -420,9 +420,19 @@ const clamp = (value: number, min: number, max: number) =>
 // narrower than it was: ~18 px in a 2048 px export.
 const SLOT_GAP = 0.009;
 const SLOT_RADIUS = 0.012;
-// The resize handle lives just inside the slot's bottom-right corner.
+// Resize handles live just inside the slot's corners, all four of them.
 const HANDLE_INSET = 0.026;
 const HANDLE_HIT_RADIUS = 0.042;
+const HANDLE_CORNERS = [
+  { sx: -1, sy: -1, cursor: "nwse-resize" },
+  { sx: 1, sy: -1, cursor: "nesw-resize" },
+  { sx: -1, sy: 1, cursor: "nesw-resize" },
+  { sx: 1, sy: 1, cursor: "nwse-resize" },
+] as const;
+
+// A photo can never zoom below cover, or the frame would show gaps.
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
 // Half / third of the canvas once the gaps between cells are taken out.
 const HALF = (1 - SLOT_GAP) / 2;
 const THIRD = (1 - SLOT_GAP * 2) / 3;
@@ -617,6 +627,62 @@ function drawPattern(ctx: CanvasRenderingContext2D, size: number, template: Temp
   ctx.restore();
 }
 
+// How far the photo can travel inside its frame at a given zoom, in the same
+// pixel space the frame is measured in. Drawing and every gesture read their
+// numbers from here, so a drag can track the pointer exactly.
+function photoShiftRange(photo: PhotoItem, zoom: number, width: number, height: number) {
+  const image = photo.image;
+  if (!image.naturalWidth || !image.naturalHeight) return { x: 0, y: 0, scale: 0 };
+  const rotated = Math.abs(photo.rotation % 180) === 90;
+  const effectiveWidth = rotated ? image.naturalHeight : image.naturalWidth;
+  const effectiveHeight = rotated ? image.naturalWidth : image.naturalHeight;
+  const scale = Math.max(width / effectiveWidth, height / effectiveHeight) * zoom;
+  return {
+    x: Math.max(0, (effectiveWidth * scale - width) / 2),
+    y: Math.max(0, (effectiveHeight * scale - height) / 2),
+    scale,
+  };
+}
+
+const shiftFromFocus = (focus: number, range: number) => (0.5 - focus) * range * 2;
+
+const focusFromShift = (shift: number, range: number) =>
+  range > 0 ? clamp(0.5 - shift / (range * 2), 0, 1) : 0.5;
+
+// Canva pins whatever sits under the cursor (or the pinch midpoint) while it
+// zooms, instead of scaling about the frame centre and letting the picture slide
+// away. anchorX/anchorY are measured from the frame centre, in frame pixels.
+function zoomAroundPoint(
+  photo: PhotoItem,
+  width: number,
+  height: number,
+  requestedZoom: number,
+  anchorX: number,
+  anchorY: number,
+) {
+  const zoom = clamp(requestedZoom, MIN_ZOOM, MAX_ZOOM);
+  const before = photoShiftRange(photo, photo.zoom, width, height);
+  const after = photoShiftRange(photo, zoom, width, height);
+  const ratio = photo.zoom > 0 ? zoom / photo.zoom : 1;
+  const shiftX = shiftFromFocus(photo.focusX, before.x) * ratio + anchorX * (1 - ratio);
+  const shiftY = shiftFromFocus(photo.focusY, before.y) * ratio + anchorY * (1 - ratio);
+  return {
+    zoom,
+    focusX: focusFromShift(shiftX, after.x),
+    focusY: focusFromShift(shiftY, after.y),
+  };
+}
+
+// Rotates a screen-space delta into the slot's own space, so tilted polaroid
+// frames still drag along the pointer rather than at an angle to it.
+function toSlotSpace(dx: number, dy: number, slot: SlotRect) {
+  const angle = -(slot.angle ?? 0);
+  return {
+    x: dx * Math.cos(angle) - dy * Math.sin(angle),
+    y: dx * Math.sin(angle) + dy * Math.cos(angle),
+  };
+}
+
 function drawPhoto(
   ctx: CanvasRenderingContext2D,
   photo: PhotoItem,
@@ -625,19 +691,10 @@ function drawPhoto(
 ) {
   const image = photo.image;
   if (!image.complete || image.naturalWidth === 0) return;
-  const rotated = Math.abs(photo.rotation % 180) === 90;
-  const effectiveWidth = rotated ? image.naturalHeight : image.naturalWidth;
-  const effectiveHeight = rotated ? image.naturalWidth : image.naturalHeight;
-  const scale = Math.max(width / effectiveWidth, height / effectiveHeight) * photo.zoom;
-  const drawnWidth = effectiveWidth * scale;
-  const drawnHeight = effectiveHeight * scale;
-  const maxShiftX = Math.max(0, (drawnWidth - width) / 2);
-  const maxShiftY = Math.max(0, (drawnHeight - height) / 2);
-  const shiftX = (0.5 - photo.focusX) * maxShiftX * 2;
-  const shiftY = (0.5 - photo.focusY) * maxShiftY * 2;
+  const { x: rangeX, y: rangeY, scale } = photoShiftRange(photo, photo.zoom, width, height);
 
   ctx.save();
-  ctx.translate(shiftX, shiftY);
+  ctx.translate(shiftFromFocus(photo.focusX, rangeX), shiftFromFocus(photo.focusY, rangeY));
   ctx.rotate((photo.rotation * Math.PI) / 180);
   ctx.drawImage(
     image,
@@ -721,10 +778,8 @@ function strokeSelection(
   const w = slot.w * size;
   const h = slot.h * size;
   const r = (slot.radius ?? 0.02) * size;
-  // Photos are full-bleed, so both the ring and the handle have to sit inside the
+  // Photos are full-bleed, so both the ring and the handles have to sit inside the
   // slot; drawn outside they would be clipped away at the canvas edge.
-  const handleX = w / 2 - HANDLE_INSET * size;
-  const handleY = h / 2 - HANDLE_INSET * size;
   const ringInset = size * 0.005;
 
   ctx.save();
@@ -743,19 +798,53 @@ function strokeSelection(
   );
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = "#236bfe";
-  ctx.beginPath();
-  ctx.arc(handleX, handleY, size * 0.017, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = Math.max(2, size * 0.003);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(handleX - size * 0.006, handleY - size * 0.006);
-  ctx.lineTo(handleX + size * 0.006, handleY + size * 0.006);
-  ctx.moveTo(handleX + size * 0.001, handleY + size * 0.006);
-  ctx.lineTo(handleX + size * 0.006, handleY + size * 0.001);
-  ctx.stroke();
+
+  // All four corners, the way Canva shows them.
+  for (const corner of HANDLE_CORNERS) {
+    const handleX = corner.sx * Math.max(0, w / 2 - HANDLE_INSET * size);
+    const handleY = corner.sy * Math.max(0, h / 2 - HANDLE_INSET * size);
+    ctx.beginPath();
+    ctx.arc(handleX, handleY, size * 0.016, 0, Math.PI * 2);
+    ctx.fillStyle = "#236bfe";
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(2, size * 0.003);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// While a photo is being dragged or zoomed, Canva keeps the part that falls
+// outside the frame visible but dimmed, so you can see what is being cut off.
+function drawCropGhost(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  slot: SlotRect,
+  photo: PhotoItem,
+  template: TemplateSpec,
+) {
+  const w = slot.w * size;
+  const h = slot.h * size;
+  const r = (slot.radius ?? 0.02) * size;
+
+  ctx.save();
+  ctx.translate((slot.x + slot.w / 2) * size, (slot.y + slot.h / 2) * size);
+  ctx.rotate(slot.angle ?? 0);
+
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  drawPhoto(ctx, photo, w, h);
+  ctx.restore();
+
+  // Repaint the part inside the frame at full strength.
+  ctx.save();
+  roundedPath(ctx, -w / 2, -h / 2, w, h, r);
+  ctx.clip();
+  ctx.fillStyle = template.panel;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  drawPhoto(ctx, photo, w, h);
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -763,11 +852,12 @@ type DrawOptions = {
   template: TemplateSpec;
   photos: PhotoItem[];
   selectedId: string | null;
+  ghostId?: string | null;
   forExport?: boolean;
 };
 
 function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: DrawOptions) {
-  const { template, photos, selectedId, forExport } = options;
+  const { template, photos, selectedId, ghostId, forExport } = options;
   ctx.canvas.width = size;
   ctx.canvas.height = size;
   ctx.clearRect(0, 0, size, size);
@@ -791,8 +881,15 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
     }
   }
 
-  // The selection ring is an editing affordance, so it stays above everything and
-  // never reaches the export.
+  // Editing affordances stay above everything and never reach the export.
+  if (!forExport && ghostId) {
+    const ghostIndex = photos.findIndex((photo) => photo.id === ghostId);
+    const ghostPhoto = photos[ghostIndex];
+    if (ghostPhoto && slots[ghostIndex]) {
+      drawCropGhost(ctx, size, slots[ghostIndex], ghostPhoto, template);
+    }
+  }
+
   if (!forExport && selectedId) {
     const selectedIndex = photos.findIndex((photo) => photo.id === selectedId);
     if (selectedIndex >= 0 && slots[selectedIndex]) strokeSelection(ctx, size, slots[selectedIndex]);
@@ -815,11 +912,15 @@ function pointInSlot(pointX: number, pointY: number, slot: SlotRect) {
   return Math.abs(x) <= slot.w / 2 && Math.abs(y) <= slot.h / 2;
 }
 
-function pointNearZoomHandle(pointX: number, pointY: number, slot: SlotRect) {
+// Returns the corner being grabbed, so the cursor can match its diagonal.
+function zoomHandleAt(pointX: number, pointY: number, slot: SlotRect) {
   const point = pointInSlotSpace(pointX, pointY, slot);
-  const handleX = slot.w / 2 - HANDLE_INSET;
-  const handleY = slot.h / 2 - HANDLE_INSET;
-  return Math.hypot(point.x - handleX, point.y - handleY) <= HANDLE_HIT_RADIUS;
+  for (const corner of HANDLE_CORNERS) {
+    const handleX = corner.sx * Math.max(0, slot.w / 2 - HANDLE_INSET);
+    const handleY = corner.sy * Math.max(0, slot.h / 2 - HANDLE_INSET);
+    if (Math.hypot(point.x - handleX, point.y - handleY) <= HANDLE_HIT_RADIUS) return corner;
+  }
+  return null;
 }
 
 function TemplateMini({ template, active }: { template: TemplateSpec; active: boolean }) {
@@ -957,6 +1058,8 @@ export default function Home() {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState("spring-garden");
   const [dropActive, setDropActive] = useState(false);
+  // Which photo is mid-gesture, so the canvas can ghost what falls outside it.
+  const [gesturePhotoId, setGesturePhotoId] = useState<string | null>(null);
   const [assetVersion, setAssetVersion] = useState(0);
 
   const template = useMemo(
@@ -994,8 +1097,9 @@ export default function Home() {
       template,
       photos,
       selectedId: selectedPhotoId,
+      ghostId: gesturePhotoId,
     });
-  }, [template, photos, selectedPhotoId, assetVersion]);
+  }, [template, photos, selectedPhotoId, gesturePhotoId, assetVersion]);
 
   useEffect(() => {
     return () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1019,14 +1123,32 @@ export default function Home() {
       const y = (event.clientY - rect.top) / rect.height;
       const { slots: currentSlots, photos: currentPhotos } = interactionRef.current;
       const index = currentSlots.findIndex((slot) => pointInSlot(x, y, slot));
+      const slot = currentSlots[index];
       const photo = currentPhotos[index];
-      if (!photo) return;
+      if (!slot || !photo) return;
       event.preventDefault();
+
+      // Multiplicative, so one notch feels the same at every zoom level, and
+      // driven by the raw delta so a trackpad glides where a wheel steps.
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1;
+      const factor = clamp(Math.exp(-event.deltaY * unit * 0.002), 0.5, 2);
+      const width = slot.w * rect.width;
+      const height = slot.h * rect.height;
+      // Keep whatever is under the cursor pinned while the zoom changes.
+      const anchor = toSlotSpace(
+        event.clientX - (rect.left + (slot.x + slot.w / 2) * rect.width),
+        event.clientY - (rect.top + (slot.y + slot.h / 2) * rect.height),
+        slot,
+      );
+
       setSelectedPhotoId(photo.id);
       setPhotos((current) =>
         current.map((item) =>
           item.id === photo.id
-            ? { ...item, zoom: clamp(item.zoom + (event.deltaY > 0 ? -0.08 : 0.08), 1, 3) }
+            ? {
+                ...item,
+                ...zoomAroundPoint(item, width, height, item.zoom * factor, anchor.x, anchor.y),
+              }
             : item,
         ),
       );
@@ -1202,6 +1324,57 @@ export default function Home() {
     return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
   };
 
+  const slotFramePixels = (slot: SlotRect, rect: DOMRect) => ({
+    width: slot.w * rect.width,
+    height: slot.h * rect.height,
+  });
+
+  // Where a client point sits relative to the frame centre, in frame pixels.
+  const slotAnchor = (slot: SlotRect, clientX: number, clientY: number, rect: DOMRect) =>
+    toSlotSpace(
+      clientX - (rect.left + (slot.x + slot.w / 2) * rect.width),
+      clientY - (rect.top + (slot.y + slot.h / 2) * rect.height),
+      slot,
+    );
+
+  // Moves the photo by a screen-space delta, one-to-one with the pointer.
+  const panPhoto = (id: string, slot: SlotRect, dxPx: number, dyPx: number, rect: DOMRect) => {
+    const local = toSlotSpace(dxPx, dyPx, slot);
+    const { width, height } = slotFramePixels(slot, rect);
+    setPhotos((current) =>
+      current.map((photo) => {
+        if (photo.id !== id) return photo;
+        const range = photoShiftRange(photo, photo.zoom, width, height);
+        return {
+          ...photo,
+          focusX: focusFromShift(shiftFromFocus(photo.focusX, range.x) + local.x, range.x),
+          focusY: focusFromShift(shiftFromFocus(photo.focusY, range.y) + local.y, range.y),
+        };
+      }),
+    );
+  };
+
+  const zoomPhotoAt = (
+    id: string,
+    slot: SlotRect,
+    rect: DOMRect,
+    nextZoomFor: (zoom: number) => number,
+    anchorX: number,
+    anchorY: number,
+  ) => {
+    const { width, height } = slotFramePixels(slot, rect);
+    setPhotos((current) =>
+      current.map((photo) =>
+        photo.id === id
+          ? {
+              ...photo,
+              ...zoomAroundPoint(photo, width, height, nextZoomFor(photo.zoom), anchorX, anchorY),
+            }
+          : photo,
+      ),
+    );
+  };
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.preventDefault();
     const point = canvasPoint(event.clientX, event.clientY);
@@ -1219,6 +1392,7 @@ export default function Home() {
       const pinchPhoto = photos[pinchIndex];
       if (pinchPhoto) {
         setSelectedPhotoId(pinchPhoto.id);
+        setGesturePhotoId(pinchPhoto.id);
         pointerGestureRef.current = {
           mode: "pinch",
           id: pinchPhoto.id,
@@ -1229,11 +1403,17 @@ export default function Home() {
       return;
     }
 
-    if (selectedPhoto && selectedIndex >= 0 && pointNearZoomHandle(point.x, point.y, slots[selectedIndex])) {
+    const handle =
+      selectedPhoto && selectedIndex >= 0
+        ? zoomHandleAt(point.x, point.y, slots[selectedIndex])
+        : null;
+    if (selectedPhoto && selectedIndex >= 0 && handle) {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
       const centerX = rect.left + (slots[selectedIndex].x + slots[selectedIndex].w / 2) * rect.width;
       const centerY = rect.top + (slots[selectedIndex].y + slots[selectedIndex].h / 2) * rect.height;
+      setGesturePhotoId(selectedPhoto.id);
+      event.currentTarget.style.cursor = handle.cursor;
       pointerGestureRef.current = {
         mode: "resize",
         id: selectedPhoto.id,
@@ -1256,6 +1436,7 @@ export default function Home() {
       return;
     }
     setSelectedPhotoId(photo.id);
+    setGesturePhotoId(photo.id);
     pointerGestureRef.current = {
       mode: "pan",
       id: photo.id,
@@ -1270,54 +1451,50 @@ export default function Home() {
       activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
     const gesture = pointerGestureRef.current;
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+
     if (!gesture) {
       const point = canvasPoint(event.clientX, event.clientY);
-      const overHandle =
-        selectedIndex >= 0 && pointNearZoomHandle(point.x, point.y, slots[selectedIndex]);
+      const handle =
+        selectedIndex >= 0 ? zoomHandleAt(point.x, point.y, slots[selectedIndex]) : null;
       const overPhoto = slots.some((slot, index) => photos[index] && pointInSlot(point.x, point.y, slot));
-      event.currentTarget.style.cursor = overHandle ? "nwse-resize" : overPhoto ? "grab" : "default";
+      event.currentTarget.style.cursor = handle ? handle.cursor : overPhoto ? "grab" : "default";
       return;
     }
+
+    const gestureIndex = photos.findIndex((photo) => photo.id === gesture.id);
+    const slot = slots[gestureIndex];
+    if (!slot || !canvasRect) return;
 
     if (gesture.mode === "pinch") {
       const pointers = [...activePointersRef.current.values()];
       if (pointers.length < 2) return;
       const [first, second] = pointers;
       const distance = Math.hypot(second.x - first.x, second.y - first.y);
-      const zoom = clamp(gesture.startZoom * (distance / gesture.startDistance), 1, 3);
-      setPhotos((current) =>
-        current.map((photo) => (photo.id === gesture.id ? { ...photo, zoom } : photo)),
-      );
+      const factor = distance / gesture.startDistance;
+      // Zoom about the midpoint between the fingers, so the picture stays put
+      // under them instead of sliding out from under the pinch.
+      const anchor = slotAnchor(slot, (first.x + second.x) / 2, (first.y + second.y) / 2, canvasRect);
+      zoomPhotoAt(gesture.id, slot, canvasRect, () => gesture.startZoom * factor, anchor.x, anchor.y);
       return;
     }
 
     if (event.pointerId !== gesture.pointerId) return;
+
     if (gesture.mode === "resize") {
-      event.currentTarget.style.cursor = "nwse-resize";
       const distance = Math.hypot(event.clientX - gesture.centerX, event.clientY - gesture.centerY);
-      const zoom = clamp(gesture.startZoom * (distance / gesture.startDistance), 1, 3);
-      setPhotos((current) =>
-        current.map((photo) => (photo.id === gesture.id ? { ...photo, zoom } : photo)),
-      );
+      const factor = distance / gesture.startDistance;
+      // A corner handle scales about the frame centre, like resizing an element.
+      zoomPhotoAt(gesture.id, slot, canvasRect, () => gesture.startZoom * factor, 0, 0);
       return;
     }
 
-    const index = photos.findIndex((photo) => photo.id === gesture.id);
-    const slot = slots[index];
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (!slot || !canvasRect) return;
-    const dx = (event.clientX - gesture.x) / canvasRect.width;
-    const dy = (event.clientY - gesture.y) / canvasRect.height;
-    setPhotos((current) =>
-      current.map((photo) =>
-        photo.id === gesture.id
-          ? {
-              ...photo,
-              focusX: clamp(photo.focusX - dx / Math.max(slot.w, 0.1), 0, 1),
-              focusY: clamp(photo.focusY - dy / Math.max(slot.h, 0.1), 0, 1),
-            }
-          : photo,
-      ),
+    panPhoto(
+      gesture.id,
+      slot,
+      event.clientX - gesture.x,
+      event.clientY - gesture.y,
+      canvasRect,
     );
     pointerGestureRef.current = { ...gesture, x: event.clientX, y: event.clientY };
   };
@@ -1327,6 +1504,7 @@ export default function Home() {
     const gesture = pointerGestureRef.current;
     if (gesture?.mode === "pinch" || (gesture && gesture.pointerId === event.pointerId)) {
       pointerGestureRef.current = null;
+      setGesturePhotoId(null);
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1334,17 +1512,28 @@ export default function Home() {
   };
 
   const handleCanvasKeyDown = (event: KeyboardEvent<HTMLCanvasElement>) => {
-    if (!selectedPhoto) return;
-    const step = event.shiftKey ? 0.08 : 0.025;
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-"].includes(event.key)) {
-      event.preventDefault();
+    const slot = selectedIndex >= 0 ? slots[selectedIndex] : undefined;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!selectedPhoto || !slot || !rect) return;
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "=", "-", "_"].includes(event.key)) {
+      return;
     }
-    if (event.key === "ArrowLeft") updateSelected({ focusX: clamp(selectedPhoto.focusX + step, 0, 1) });
-    if (event.key === "ArrowRight") updateSelected({ focusX: clamp(selectedPhoto.focusX - step, 0, 1) });
-    if (event.key === "ArrowUp") updateSelected({ focusY: clamp(selectedPhoto.focusY + step, 0, 1) });
-    if (event.key === "ArrowDown") updateSelected({ focusY: clamp(selectedPhoto.focusY - step, 0, 1) });
-    if (event.key === "+" || event.key === "=") updateSelected({ zoom: clamp(selectedPhoto.zoom + 0.08, 1, 3) });
-    if (event.key === "-") updateSelected({ zoom: clamp(selectedPhoto.zoom - 0.08, 1, 3) });
+    event.preventDefault();
+
+    // Arrows nudge by a fixed on-screen distance, so they match dragging.
+    const step = event.shiftKey ? 24 : 8;
+    if (event.key === "ArrowLeft") panPhoto(selectedPhoto.id, slot, -step, 0, rect);
+    if (event.key === "ArrowRight") panPhoto(selectedPhoto.id, slot, step, 0, rect);
+    if (event.key === "ArrowUp") panPhoto(selectedPhoto.id, slot, 0, -step, rect);
+    if (event.key === "ArrowDown") panPhoto(selectedPhoto.id, slot, 0, step, rect);
+
+    const zoomStep = event.shiftKey ? 1.25 : 1.1;
+    if (event.key === "+" || event.key === "=") {
+      zoomPhotoAt(selectedPhoto.id, slot, rect, (zoom) => zoom * zoomStep, 0, 0);
+    }
+    if (event.key === "-" || event.key === "_") {
+      zoomPhotoAt(selectedPhoto.id, slot, rect, (zoom) => zoom / zoomStep, 0, 0);
+    }
   };
 
   const downloadImage = async () => {
@@ -1538,7 +1727,7 @@ export default function Home() {
             <div className="stage-toolbar-actions">
               <div className="stage-hint">
                 <Move aria-hidden="true" />
-                直接拖曳移動・拖藍點縮放
+                直接拖曳移動・拖角落縮放
               </div>
               {selectedPhoto ? (
                 <div className="stage-photo-actions" role="toolbar" aria-label={`調整第 ${selectedIndex + 1} 張照片`}>
@@ -1556,7 +1745,9 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateSelected({ zoom: 1, focusX: 0.5, focusY: 0.5, rotation: 0 })}
+                    onClick={() =>
+                      updateSelected({ zoom: MIN_ZOOM, focusX: 0.5, focusY: 0.5, rotation: 0 })
+                    }
                     aria-label="重設照片位置與縮放"
                     title="重設"
                   >
@@ -1589,7 +1780,7 @@ export default function Home() {
               onKeyDown={handleCanvasKeyDown}
               tabIndex={0}
               role="img"
-              aria-label={`正方形成長日誌預覽，目前使用${template.name}。點選照片後可直接拖曳移動，使用滾輪、雙指或右下藍點縮放。`}
+              aria-label={`正方形成長日誌預覽，目前使用${template.name}。點選照片後可直接拖曳移動，使用滾輪、雙指或四角藍點縮放，方向鍵可微調。`}
             />
             {!photos.length ? (
               <div className="canvas-empty-action">
