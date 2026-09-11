@@ -820,6 +820,8 @@ button {
 
 .template-mini-overlay {
   position: absolute;
+  /* Mirror the canvas layer order: the decorative frame sits above the photo slots. */
+  z-index: 2;
   inset: 0;
   background-position: center;
   background-repeat: no-repeat;

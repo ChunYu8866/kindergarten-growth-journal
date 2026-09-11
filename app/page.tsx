@@ -10,7 +10,6 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent,
 } from "react";
 import {
   Check,
@@ -37,6 +36,39 @@ const CANVAS_SIZE = 1200;
 const EXPORT_SIZE = 2048;
 const MAX_PHOTOS = 4;
 const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const PREVIEW_MAX_SIZE = 1600;
+
+// Decorations ship as WebP: one full-size sheet per decoration for the canvas and
+// a 240 px thumbnail for the 16 template cards, so the picker never pulls a 300 KB
+// sheet just to paint a swatch.
+const overlayUrl = (decoration: string) => `${ASSET_BASE}/${decoration}.webp`;
+const overlayThumbUrl = (decoration: string) => `${ASSET_BASE}/${decoration}-thumb.webp`;
+
+const overlayCache = new Map<string, HTMLImageElement>();
+const overlayRequests = new Map<string, Promise<HTMLImageElement | null>>();
+
+// Decorations load on demand and stay cached, so the first paint only fetches the
+// sheet the selected template actually needs.
+function loadOverlay(decoration: string): Promise<HTMLImageElement | null> {
+  const cached = overlayCache.get(decoration);
+  if (cached) return Promise.resolve(cached);
+
+  let pending = overlayRequests.get(decoration);
+  if (!pending) {
+    pending = new Promise<HTMLImageElement | null>((resolve) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => {
+        overlayCache.set(decoration, image);
+        resolve(image);
+      };
+      image.onerror = () => resolve(null);
+      image.src = overlayUrl(decoration);
+    });
+    overlayRequests.set(decoration, pending);
+  }
+  return pending;
+}
 
 type LayoutKind =
   | "single"
@@ -117,7 +149,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#f5b942",
     ink: "#60411c",
     pattern: "dots",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "peach-pair",
@@ -132,7 +164,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#ef8f72",
     ink: "#69382c",
     pattern: "confetti",
-    overlay: `${ASSET_BASE}/decor-spring.png`,
+    overlay: "decor-spring",
   },
   {
     id: "sky-story",
@@ -147,7 +179,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#62a8d8",
     ink: "#244c68",
     pattern: "waves",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "spring-garden",
@@ -162,7 +194,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#ef8fa0",
     ink: "#574237",
     pattern: "plain",
-    overlay: `${ASSET_BASE}/decor-spring.png`,
+    overlay: "decor-spring",
   },
   {
     id: "woodland-friends",
@@ -177,7 +209,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#769553",
     ink: "#34452c",
     pattern: "dots",
-    overlay: `${ASSET_BASE}/decor-woodland.png`,
+    overlay: "decor-woodland",
   },
   {
     id: "summer-bubbles",
@@ -192,7 +224,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#35aaa5",
     ink: "#205d5b",
     pattern: "dots",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "green-adventure",
@@ -207,7 +239,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#75a95c",
     ink: "#34512b",
     pattern: "grid",
-    overlay: `${ASSET_BASE}/decor-woodland.png`,
+    overlay: "decor-woodland",
   },
   {
     id: "candy-grid",
@@ -222,7 +254,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#e77eae",
     ink: "#6e3150",
     pattern: "confetti",
-    overlay: `${ASSET_BASE}/decor-spring.png`,
+    overlay: "decor-spring",
   },
   {
     id: "growth-window",
@@ -237,7 +269,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#7089d6",
     ink: "#34446c",
     pattern: "dots",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "autumn-collage",
@@ -252,7 +284,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#d67b3f",
     ink: "#633c25",
     pattern: "plain",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "observation-six",
@@ -267,7 +299,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#50a386",
     ink: "#285447",
     pattern: "stripes",
-    overlay: `${ASSET_BASE}/decor-spring.png`,
+    overlay: "decor-spring",
   },
   {
     id: "weekly-cluster",
@@ -282,7 +314,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#dd9b34",
     ink: "#5e431f",
     pattern: "confetti",
-    overlay: `${ASSET_BASE}/decor-woodland.png`,
+    overlay: "decor-woodland",
   },
   {
     id: "nine-memories",
@@ -297,7 +329,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#8874c9",
     ink: "#473d6b",
     pattern: "grid",
-    overlay: `${ASSET_BASE}/decor-spring.png`,
+    overlay: "decor-spring",
   },
   {
     id: "timeline",
@@ -312,7 +344,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#4d9fce",
     ink: "#28536c",
     pattern: "waves",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
   {
     id: "polaroid-book",
@@ -327,7 +359,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#bd765b",
     ink: "#5c4035",
     pattern: "stripes",
-    overlay: `${ASSET_BASE}/decor-woodland.png`,
+    overlay: "decor-woodland",
   },
   {
     id: "adaptive",
@@ -342,7 +374,7 @@ const TEMPLATES: TemplateSpec[] = [
     accent: "#4689bd",
     ink: "#284b64",
     pattern: "plain",
-    overlay: `${ASSET_BASE}/decor-seasons.png`,
+    overlay: "decor-seasons",
   },
 ];
 
@@ -661,12 +693,11 @@ type DrawOptions = {
   template: TemplateSpec;
   photos: PhotoItem[];
   selectedId: string | null;
-  overlayImages: Record<string, HTMLImageElement>;
   forExport?: boolean;
 };
 
 function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: DrawOptions) {
-  const { template, photos, selectedId, overlayImages, forExport } = options;
+  const { template, photos, selectedId, forExport } = options;
   ctx.canvas.width = size;
   ctx.canvas.height = size;
   ctx.clearRect(0, 0, size, size);
@@ -674,16 +705,19 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   ctx.fillRect(0, 0, size, size);
   drawPattern(ctx, size, template);
 
-  // Decorations sit behind the photos so the picture itself always stays clean.
-  if (template.overlay) {
-    const overlay = overlayImages[template.overlay];
-    if (overlay?.complete && overlay.naturalWidth > 0) ctx.drawImage(overlay, 0, 0, size, size);
-  }
-
   const slotCount = photos.length || template.sample;
   const slots = getSlots(template.layout, slotCount);
   slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
 
+  // Layer order is background -> photos -> decorative frame, so the flowers, animals
+  // and seasonal corners overlap the photo edges instead of hiding behind them.
+  if (template.overlay) {
+    const overlay = overlayCache.get(template.overlay);
+    if (overlay?.complete && overlay.naturalWidth > 0) ctx.drawImage(overlay, 0, 0, size, size);
+  }
+
+  // The selection ring is an editing affordance, so it stays above everything and
+  // never reaches the export.
   if (!forExport && selectedId) {
     const selectedIndex = photos.findIndex((photo) => photo.id === selectedId);
     if (selectedIndex >= 0 && slots[selectedIndex]) strokeSelection(ctx, size, slots[selectedIndex]);
@@ -722,7 +756,10 @@ function TemplateMini({ template, active }: { template: TemplateSpec; active: bo
       aria-hidden="true"
     >
       {template.overlay ? (
-        <span className="template-mini-overlay" style={{ backgroundImage: `url(${template.overlay})` }} />
+        <span
+          className="template-mini-overlay"
+          style={{ backgroundImage: `url(${overlayThumbUrl(template.overlay)})` }}
+        />
       ) : null}
       {slots.map((slot, index) => (
         <span
@@ -790,12 +827,15 @@ type ModelContextLike = {
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const overlayImagesRef = useRef<Record<string, HTMLImageElement>>({});
   const objectUrlsRef = useRef<string[]>([]);
   const dragPhotoIdRef = useRef<string | null>(null);
   const pointerGestureRef = useRef<CanvasGesture | null>(null);
   const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
   const reservedPhotoCountRef = useRef(0);
+  const interactionRef = useRef<{ slots: SlotRect[]; photos: PhotoItem[] }>({
+    slots: [],
+    photos: [],
+  });
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -815,32 +855,69 @@ export default function Home() {
     photos.length > 0 && (photos.length < template.min || photos.length > template.max);
 
   useEffect(() => {
-    const overlays = [...new Set(TEMPLATES.map((item) => item.overlay).filter(Boolean))] as string[];
-    overlays.forEach((src) => {
-      const image = new Image();
-      image.decoding = "async";
-      image.onload = () => {
-        overlayImagesRef.current[src] = image;
-        setAssetVersion((version) => version + 1);
-      };
-      image.src = src;
+    const decoration = template.overlay;
+    if (!decoration || overlayCache.has(decoration)) return;
+    let active = true;
+    void loadOverlay(decoration).then((image) => {
+      if (active && image) setAssetVersion((version) => version + 1);
     });
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [template.overlay]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
-    drawComposition(ctx, CANVAS_SIZE, {
+    // Match the backing store to the device pixel ratio so the preview stays sharp
+    // on retina screens. The export always renders at EXPORT_SIZE regardless.
+    const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+    const previewSize = Math.min(PREVIEW_MAX_SIZE, Math.round(CANVAS_SIZE * Math.min(ratio, 2)));
+    drawComposition(ctx, previewSize, {
       template,
       photos,
       selectedId: selectedPhotoId,
-      overlayImages: overlayImagesRef.current,
     });
   }, [template, photos, selectedPhotoId, assetVersion]);
 
   useEffect(() => {
     return () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
+  useEffect(() => {
+    interactionRef.current = { slots, photos };
+  }, [slots, photos]);
+
+  // React registers `wheel` as a passive listener, so an onWheel handler cannot call
+  // preventDefault and the page scrolls out from under the zoom. Bind it natively
+  // once instead, reading the latest slots/photos from the mirror ref.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleNativeWheel = (event: globalThis.WheelEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+      const { slots: currentSlots, photos: currentPhotos } = interactionRef.current;
+      const index = currentSlots.findIndex((slot) => pointInSlot(x, y, slot));
+      const photo = currentPhotos[index];
+      if (!photo) return;
+      event.preventDefault();
+      setSelectedPhotoId(photo.id);
+      setPhotos((current) =>
+        current.map((item) =>
+          item.id === photo.id
+            ? { ...item, zoom: clamp(item.zoom + (event.deltaY > 0 ? -0.08 : 0.08), 1, 3) }
+            : item,
+        ),
+      );
+    };
+
+    canvas.addEventListener("wheel", handleNativeWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleNativeWheel);
   }, []);
 
   useEffect(() => {
@@ -938,18 +1015,19 @@ export default function Home() {
   );
 
   const removePhoto = (id: string) => {
+    const index = photos.findIndex((photo) => photo.id === id);
+    if (index < 0) return;
+    const removed = photos[index];
+    const next = photos.filter((photo) => photo.id !== id);
+
+    setPhotos(next);
+    if (id === selectedPhotoId) {
+      setSelectedPhotoId(next[Math.min(index, next.length - 1)]?.id ?? null);
+    }
+
     reservedPhotoCountRef.current = Math.max(0, reservedPhotoCountRef.current - 1);
-    setPhotos((current) => {
-      const index = current.findIndex((photo) => photo.id === id);
-      const removed = current[index];
-      if (removed) {
-        URL.revokeObjectURL(removed.url);
-        objectUrlsRef.current = objectUrlsRef.current.filter((url) => url !== removed.url);
-      }
-      const next = current.filter((photo) => photo.id !== id);
-      if (id === selectedPhotoId) setSelectedPhotoId(next[Math.min(index, next.length - 1)]?.id ?? null);
-      return next;
-    });
+    URL.revokeObjectURL(removed.url);
+    objectUrlsRef.current = objectUrlsRef.current.filter((url) => url !== removed.url);
     toast.info("照片已移除");
   };
 
@@ -1116,22 +1194,6 @@ export default function Home() {
     }
   };
 
-  const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
-    const point = canvasPoint(event.clientX, event.clientY);
-    const index = slots.findIndex((slot) => pointInSlot(point.x, point.y, slot));
-    const photo = photos[index];
-    if (!photo) return;
-    event.preventDefault();
-    setSelectedPhotoId(photo.id);
-    setPhotos((current) =>
-      current.map((item) =>
-        item.id === photo.id
-          ? { ...item, zoom: clamp(item.zoom + (event.deltaY > 0 ? -0.08 : 0.08), 1, 3) }
-          : item,
-      ),
-    );
-  };
-
   const handleCanvasKeyDown = (event: KeyboardEvent<HTMLCanvasElement>) => {
     if (!selectedPhoto) return;
     const step = event.shiftKey ? 0.08 : 0.025;
@@ -1152,6 +1214,8 @@ export default function Home() {
       return;
     }
     await document.fonts?.ready;
+    // Never export a half-loaded sheet: wait for the decoration before drawing.
+    if (template.overlay) await loadOverlay(template.overlay);
     const exportCanvas = document.createElement("canvas");
     const ctx = exportCanvas.getContext("2d");
     if (!ctx) return;
@@ -1159,7 +1223,6 @@ export default function Home() {
       template,
       photos,
       selectedId: null,
-      overlayImages: overlayImagesRef.current,
       forExport: true,
     });
     exportCanvas.toBlob((blob) => {
@@ -1360,7 +1423,6 @@ export default function Home() {
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              onWheel={handleWheel}
               onKeyDown={handleCanvasKeyDown}
               tabIndex={0}
               role="img"

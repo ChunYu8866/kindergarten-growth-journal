@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -31,12 +48,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build static website
-        run: pnpm exec next build
+        run: pnpm build
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
       - name: Verify website entrypoint
         run: |
           test -s out/index.html
+          for decoration in seasons spring woodland; do
+            test -s "out/decor-$decoration.webp"
+            test -s "out/decor-$decoration-thumb.webp"
+          done
           touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v5
         with:

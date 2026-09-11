@@ -1,6 +1,10 @@
 # 原創裝飾素材生成紀錄
 
-以下三張素材皆使用內建 ImageGen 產生，輸出為 1254 × 1254、透明背景 PNG，網站內分別儲存為 `public/decor-spring.png`、`public/decor-woodland.png`、`public/decor-seasons.png`。
+以下三張素材皆使用內建 ImageGen 產生，原始輸出為 1254 × 1254、透明背景 PNG。
+
+網站實際載入的是壓縮後的 WebP：畫布用的全尺寸圖 `public/decor-{spring,woodland,seasons}.webp`（1254 × 1254，quality 82），版型選單縮圖用 `public/decor-{spring,woodland,seasons}-thumb.webp`（240 × 240）。三張原始 PNG 合計 3.6 MB，換成 WebP 後全部素材只剩約 1.0 MB，而且畫布只會下載目前版型用到的那一張。
+
+要重新產生素材時，請依下列 prompt 產出透明 PNG，再轉成同名 WebP 與 240 px 縮圖。
 
 ## 春日小花與蝴蝶
 

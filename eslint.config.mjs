@@ -10,11 +10,14 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
-    "build/**",
     "next-env.d.ts",
+    // Build output from tooling this project no longer uses; never lint it.
+    "dist/**",
+    ".vinext/**",
+    ".wrangler/**",
   ]),
   {
-    files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
+    files: ["components/ui/**/*.{ts,tsx}"],
     rules: {
       // These files are vendored verbatim from shadcn@4.17.0. Keep the
       // registry source intact while applying the stricter rules to Site code.
