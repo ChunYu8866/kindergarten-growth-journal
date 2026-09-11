@@ -113,31 +113,23 @@ button {
   min-height: 100vh;
 }
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1.25rem;
-  min-height: 76px;
-  padding: 0.75rem clamp(1rem, 3vw, 2.75rem);
-  border-bottom: 1px solid rgba(192, 214, 207, 0.76);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 9px 28px rgba(36, 83, 73, 0.055);
-  backdrop-filter: blur(18px);
-}
-
 .eyebrow,
 .empty-photo-note p {
   margin: 0;
 }
 
+/* Sits at the bottom of the step 1 panel, below the photo list. */
+.panel-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 0.85rem;
+}
+
 .export-button {
-  min-height: 44px;
+  width: 100%;
+  min-height: 46px;
   padding-inline: 1.15rem;
-  border-radius: 13px;
+  border-radius: 14px;
   box-shadow: 0 7px 16px rgba(33, 123, 105, 0.18);
 }
 
@@ -163,10 +155,10 @@ button {
 .photo-panel {
   grid-area: photos;
   position: sticky;
-  top: 96px;
+  top: 20px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 116px);
+  max-height: calc(100vh - 40px);
   min-height: 470px;
   padding: 1rem;
 }
@@ -650,10 +642,10 @@ button {
 .design-panel {
   grid-area: design;
   position: sticky;
-  top: 96px;
+  top: 20px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 116px);
+  max-height: calc(100vh - 40px);
   overflow: hidden;
   padding: 0.8rem;
 }
@@ -829,20 +821,6 @@ button {
 }
 
 @media (max-width: 760px) {
-  .topbar {
-    min-height: 68px;
-    padding: 0.65rem 0.85rem;
-  }
-
-  .export-button {
-    min-width: 44px;
-    padding-inline: 0.75rem;
-  }
-
-  .export-button svg {
-    width: 18px;
-  }
-
   .workspace {
     grid-template-areas:
       "stage"
@@ -932,15 +910,6 @@ button {
 }
 
 @media (max-width: 520px) {
-  .export-button {
-    font-size: 0;
-  }
-
-  .export-button svg {
-    width: 20px;
-    height: 20px;
-  }
-
   .stage-toolbar h1 {
     font-size: 1.08rem;
   }

@@ -1270,13 +1270,6 @@ export default function Home() {
       }}
       onDrop={handleDrop}
     >
-      <header className="topbar">
-        <Button className="export-button" onClick={downloadImage} disabled={!photos.length}>
-          <Download aria-hidden="true" />
-          下載成品
-        </Button>
-      </header>
-
       <section className="workspace" aria-label="成長日誌編輯器">
         <aside className="panel photo-panel" aria-label="照片管理">
           <div className="panel-heading">
@@ -1365,6 +1358,13 @@ export default function Home() {
               <p>照片會鋪滿每個框，加入後仍可自由移動與縮放。</p>
             </div>
           )}
+
+          <div className="panel-footer">
+            <Button className="export-button" onClick={downloadImage} disabled={!photos.length}>
+              <Download aria-hidden="true" />
+              下載成品
+            </Button>
+          </div>
         </aside>
 
         <section className="stage-column" aria-label="1 比 1 成品預覽">
