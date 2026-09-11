@@ -7,8 +7,9 @@
 - 每張成品最多 4 張照片，多選時會明確提示上限
 - 16 款 1:1 版型，每款都有花草、森林小動物或四季水彩邊角裝飾
 - 所有照片框都是 1:1 正方形或橫式 4:3，不使用直式框
-- 點選照片後可拖曳裁切、滑桿或滾輪縮放、90 度旋轉、重設與刪除
-- 照片以 cover 方式滿版鋪滿照片框，標準版型不留內白邊
+- 點選照片後直接在畫布上拖曳移動，拖右下藍色把手、滾輪或雙指縮放
+- 照片以 cover 方式滿版鋪滿照片框，只保留外側邊框
+- 花草、小動物與四季裝飾放在照片後方，不會遮蓋照片內容
 - 照片可拖曳排序，也有前移／後移按鈕可使用
 - 匯出成品只有照片與裝飾，不加姓名、日期或說明文字
 - 匯出 2048 × 2048 PNG
@@ -26,7 +27,9 @@ pnpm dev
 
 ## GitHub Pages
 
-專案已包含 `.github/workflows/deploy-pages.yml`。推送到 `main` 後，到儲存庫的 **Settings → Pages → Source** 選擇 **GitHub Actions**，之後每次推送都會自動建置與更新網站。
+網頁版：[https://chunyu8866.github.io/kindergarten-growth-journal/](https://chunyu8866.github.io/kindergarten-growth-journal/)
+
+專案已包含 `.github/workflows/deploy-pages.yml`，推送到 `main` 後會自動建置與更新網站。
 
 ## 原創裝飾素材
 

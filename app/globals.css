@@ -232,8 +232,7 @@ button {
 }
 
 .panel-heading,
-.stage-toolbar,
-.adjust-heading {
+.stage-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -245,8 +244,7 @@ button {
 }
 
 .panel-heading h2,
-.stage-toolbar h1,
-.adjust-heading h3 {
+.stage-toolbar h1 {
   margin: 0;
   color: #21483f;
   font-weight: 800;
@@ -259,10 +257,6 @@ button {
 
 .stage-toolbar h1 {
   font-size: clamp(1.15rem, 2vw, 1.46rem);
-}
-
-.adjust-heading h3 {
-  font-size: 1rem;
 }
 
 .eyebrow {
@@ -507,6 +501,75 @@ button {
   height: 17px;
 }
 
+.stage-toolbar-actions,
+.stage-photo-actions {
+  display: flex;
+  align-items: center;
+}
+
+.stage-toolbar-actions {
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.stage-photo-actions {
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border: 1px solid #d6e7e2;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 6px 18px rgba(31, 70, 60, 0.09);
+}
+
+.stage-photo-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0 0.38rem;
+  color: #356d60;
+  font-size: 0.7rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.stage-photo-label output {
+  color: #71847f;
+}
+
+.stage-photo-actions button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  color: #356d60;
+  border: 1px solid #dceae6;
+  border-radius: 9px;
+  background: #f8fcfb;
+  cursor: pointer;
+}
+
+.stage-photo-actions button:hover {
+  border-color: #8fc2b5;
+  background: #edf8f5;
+}
+
+.stage-photo-actions button:focus-visible {
+  outline: 3px solid rgba(35, 107, 254, 0.32);
+  outline-offset: 2px;
+}
+
+.stage-photo-actions button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stage-photo-actions .stage-delete-action {
+  color: #b14f56;
+  border-color: #f0d7d9;
+  background: #fff8f8;
+}
+
 .canvas-wrap {
   position: relative;
   width: min(100%, 740px);
@@ -749,6 +812,7 @@ button {
 
 .template-mini-slot {
   position: absolute;
+  z-index: 1;
   border: 1px solid;
   border-radius: 3px;
   box-shadow: 0 2px 5px rgba(56, 45, 40, 0.08);
@@ -798,79 +862,6 @@ button {
   border-radius: 999px;
   background: #217b69;
   box-shadow: 0 3px 8px rgba(32, 93, 81, 0.22);
-}
-
-.adjust-card {
-  flex: 0 0 auto;
-  margin-top: 0.75rem;
-  padding: 0.9rem;
-  border: 1px solid #dce8e4;
-  border-radius: 18px;
-  background: #f8fbfa;
-}
-
-.adjust-heading {
-  margin-bottom: 0.75rem;
-}
-
-.adjust-heading > span {
-  padding: 0.25rem 0.5rem;
-  color: #406b61;
-  border-radius: 999px;
-  background: #e3f0ec;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.zoom-row {
-  display: grid;
-  grid-template-columns: 22px 1fr 22px;
-  align-items: center;
-  gap: 0.7rem;
-  color: #668078;
-  min-height: 36px;
-}
-
-.zoom-row svg {
-  width: 20px;
-  height: 20px;
-}
-
-.adjust-help,
-.adjust-empty {
-  color: #71837e;
-  font-size: 0.74rem;
-}
-
-.adjust-help {
-  margin: 0.35rem 0 0.72rem;
-}
-
-.adjust-empty {
-  margin: 0;
-}
-
-.adjust-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem;
-}
-
-.adjust-actions button {
-  min-height: 36px;
-  border-radius: 10px;
-}
-
-.adjust-actions button:last-child {
-  color: #b2444a;
-}
-
-.mobile-export-button {
-  display: none;
-  width: 100%;
-  min-height: 48px;
-  margin-top: 0.75rem;
-  border-radius: 13px;
 }
 
 @media (max-width: 1180px) {
@@ -932,12 +923,20 @@ button {
   }
 
   .stage-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
     min-height: 48px;
     margin-bottom: 0.45rem;
   }
 
+  .stage-toolbar-actions {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 0.24rem;
+  }
+
   .stage-hint {
-    display: none;
+    font-size: 0.66rem;
   }
 
   .canvas-wrap {
@@ -947,6 +946,14 @@ button {
 
   .journal-canvas {
     border-radius: 15px;
+  }
+
+  .stage-photo-label {
+    font-size: 0;
+  }
+
+  .stage-photo-label output {
+    font-size: 0.68rem;
   }
 
   .canvas-empty-action {
@@ -991,9 +998,6 @@ button {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .mobile-export-button {
-    display: inline-flex;
-  }
 }
 
 @media (max-width: 520px) {

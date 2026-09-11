@@ -27,13 +27,10 @@ import {
   Sprout,
   Trash2,
   Upload,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { Toaster } from "@/components/ui/sonner";
 
 const CANVAS_SIZE = 1200;
@@ -92,6 +89,19 @@ type PhotoItem = {
   focusY: number;
   rotation: number;
 };
+
+type CanvasGesture =
+  | { mode: "pan"; id: string; pointerId: number; x: number; y: number }
+  | {
+      mode: "resize";
+      id: string;
+      pointerId: number;
+      centerX: number;
+      centerY: number;
+      startDistance: number;
+      startZoom: number;
+    }
+  | { mode: "pinch"; id: string; startDistance: number; startZoom: number };
 
 const TEMPLATES: TemplateSpec[] = [
   {
@@ -370,9 +380,10 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
 
 function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   const n = Math.max(1, count);
-  if (layout === "single" || n === 1) {
+  if (n === 1) {
     return [{ x: 0.09, y: 0.1925, w: 0.82, h: 0.615, radius: 0.035 }];
   }
+  if (layout === "single") return gridSlots(n);
   if (layout === "split-v" && n === 2) {
     return gridSlots(2, 2);
   }
@@ -414,9 +425,9 @@ function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   }
   if (layout === "cluster" && n === 3) {
     return [
-      { x: 0.08, y: 0.29, w: 0.31, h: 0.31, radius: 0.02, angle: -0.045 },
-      { x: 0.345, y: 0.41, w: 0.31, h: 0.31, radius: 0.02, angle: 0.025 },
-      { x: 0.61, y: 0.27, w: 0.31, h: 0.31, radius: 0.02, angle: -0.02 },
+      { x: 0.07, y: 0.29, w: 0.28, h: 0.28, radius: 0.02, angle: -0.035 },
+      { x: 0.36, y: 0.41, w: 0.28, h: 0.28, radius: 0.02, angle: 0.025 },
+      { x: 0.65, y: 0.27, w: 0.28, h: 0.28, radius: 0.02, angle: -0.02 },
     ];
   }
   if (layout === "timeline" && n === 4) {
@@ -578,9 +589,8 @@ function drawSlot(
   ctx.shadowBlur = size * 0.018;
   ctx.shadowOffsetY = size * 0.008;
   ctx.fillStyle = template.panel;
-  // Standard layouts are true full-bleed: the photo reaches the slot edge.
-  // The polaroid layout keeps an outer paper border as part of its decoration.
-  const frame = isPolaroid ? size * 0.014 : 0;
+  // The photo remains full-bleed inside its crop while a slim frame sits outside it.
+  const frame = isPolaroid ? size * 0.014 : size * 0.006;
   const bottomFrame = isPolaroid ? size * 0.035 : frame;
   roundedPath(ctx, -w / 2 - frame, -h / 2 - frame, w + frame * 2, h + frame + bottomFrame, r + frame);
   ctx.fill();
@@ -633,8 +643,17 @@ function strokeSelection(
   ctx.setLineDash([]);
   ctx.fillStyle = "#236bfe";
   ctx.beginPath();
-  ctx.arc(w / 2 + size * 0.008, h / 2 + size * 0.008, size * 0.012, 0, Math.PI * 2);
+  ctx.arc(w / 2 + size * 0.008, h / 2 + size * 0.008, size * 0.017, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = Math.max(2, size * 0.003);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(w / 2 + size * 0.002, h / 2 + size * 0.002);
+  ctx.lineTo(w / 2 + size * 0.014, h / 2 + size * 0.014);
+  ctx.moveTo(w / 2 + size * 0.009, h / 2 + size * 0.014);
+  ctx.lineTo(w / 2 + size * 0.014, h / 2 + size * 0.009);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -655,14 +674,15 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   ctx.fillRect(0, 0, size, size);
   drawPattern(ctx, size, template);
 
-  const slotCount = photos.length || template.sample;
-  const slots = getSlots(template.layout, slotCount);
-  slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
-
+  // Decorations sit behind the photos so the picture itself always stays clean.
   if (template.overlay) {
     const overlay = overlayImages[template.overlay];
     if (overlay?.complete && overlay.naturalWidth > 0) ctx.drawImage(overlay, 0, 0, size, size);
   }
+
+  const slotCount = photos.length || template.sample;
+  const slots = getSlots(template.layout, slotCount);
+  slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
 
   if (!forExport && selectedId) {
     const selectedIndex = photos.findIndex((photo) => photo.id === selectedId);
@@ -670,7 +690,7 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   }
 }
 
-function pointInSlot(pointX: number, pointY: number, slot: SlotRect) {
+function pointInSlotSpace(pointX: number, pointY: number, slot: SlotRect) {
   const cx = slot.x + slot.w / 2;
   const cy = slot.y + slot.h / 2;
   const angle = -(slot.angle ?? 0);
@@ -678,7 +698,19 @@ function pointInSlot(pointX: number, pointY: number, slot: SlotRect) {
   const dy = pointY - cy;
   const x = dx * Math.cos(angle) - dy * Math.sin(angle);
   const y = dx * Math.sin(angle) + dy * Math.cos(angle);
+  return { x, y };
+}
+
+function pointInSlot(pointX: number, pointY: number, slot: SlotRect) {
+  const { x, y } = pointInSlotSpace(pointX, pointY, slot);
   return Math.abs(x) <= slot.w / 2 && Math.abs(y) <= slot.h / 2;
+}
+
+function pointNearZoomHandle(pointX: number, pointY: number, slot: SlotRect) {
+  const point = pointInSlotSpace(pointX, pointY, slot);
+  const handleX = slot.w / 2 + 0.008;
+  const handleY = slot.h / 2 + 0.008;
+  return Math.hypot(point.x - handleX, point.y - handleY) <= 0.042;
 }
 
 function TemplateMini({ template, active }: { template: TemplateSpec; active: boolean }) {
@@ -689,6 +721,9 @@ function TemplateMini({ template, active }: { template: TemplateSpec; active: bo
       style={{ background: template.background, color: template.ink }}
       aria-hidden="true"
     >
+      {template.overlay ? (
+        <span className="template-mini-overlay" style={{ backgroundImage: `url(${template.overlay})` }} />
+      ) : null}
       {slots.map((slot, index) => (
         <span
           key={index}
@@ -704,9 +739,6 @@ function TemplateMini({ template, active }: { template: TemplateSpec; active: bo
           }}
         />
       ))}
-      {template.overlay ? (
-        <span className="template-mini-overlay" style={{ backgroundImage: `url(${template.overlay})` }} />
-      ) : null}
     </span>
   );
 }
@@ -719,10 +751,15 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
   try {
     await image.decode();
   } catch {
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error(`無法讀取 ${file.name}`));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error(`無法讀取 ${file.name}`));
+      });
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
   }
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -756,7 +793,9 @@ export default function Home() {
   const overlayImagesRef = useRef<Record<string, HTMLImageElement>>({});
   const objectUrlsRef = useRef<string[]>([]);
   const dragPhotoIdRef = useRef<string | null>(null);
-  const pointerDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const pointerGestureRef = useRef<CanvasGesture | null>(null);
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const reservedPhotoCountRef = useRef(0);
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
@@ -838,36 +877,49 @@ export default function Home() {
   }, []);
 
   const addFiles = async (fileList: FileList | File[]) => {
-      const imageFiles = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
-      if (!imageFiles.length) {
-        toast.error("請選擇 JPG、PNG 或其他照片檔案");
-        return;
-      }
-      const available = MAX_PHOTOS - photos.length;
-      if (available <= 0) {
-        toast.error(`一張成品最多放 ${MAX_PHOTOS} 張照片`);
-        return;
-      }
-      const accepted = imageFiles.slice(0, available);
-      try {
-        const loaded = await Promise.all(accepted.map(fileToPhoto));
-        loaded.forEach((photo) => objectUrlsRef.current.push(photo.url));
-        setPhotos((current) => [...current, ...loaded]);
-        setSelectedPhotoId((current) => current ?? loaded[0]?.id ?? null);
-        if (photos.length === 0) {
-          const recommended = TEMPLATES.find(
-            (item) => loaded.length >= item.min && loaded.length <= item.max,
-          );
-          if (recommended) setTemplateId(recommended.id);
-        }
-        if (accepted.length < imageFiles.length) {
-          toast.warning(`已加入 ${accepted.length} 張；單張成品上限為 ${MAX_PHOTOS} 張`);
-        } else {
-          toast.success(`已加入 ${loaded.length} 張照片`);
-        }
-      } catch {
-        toast.error("有照片無法讀取，請換一個檔案再試");
-      }
+    const imageFiles = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+    if (!imageFiles.length) {
+      toast.error("請選擇 JPG、PNG 或其他照片檔案");
+      return;
+    }
+    const startingCount = reservedPhotoCountRef.current;
+    const available = MAX_PHOTOS - startingCount;
+    if (available <= 0) {
+      toast.error(`一張成品最多放 ${MAX_PHOTOS} 張照片`);
+      return;
+    }
+
+    const accepted = imageFiles.slice(0, available);
+    reservedPhotoCountRef.current += accepted.length;
+    const results = await Promise.allSettled(accepted.map(fileToPhoto));
+    const loaded = results
+      .filter((result): result is PromiseFulfilledResult<PhotoItem> => result.status === "fulfilled")
+      .map((result) => result.value);
+    const failedCount = accepted.length - loaded.length;
+    reservedPhotoCountRef.current = Math.max(0, reservedPhotoCountRef.current - failedCount);
+
+    if (!loaded.length) {
+      toast.error("有照片無法讀取，請換一個檔案再試");
+      return;
+    }
+
+    loaded.forEach((photo) => objectUrlsRef.current.push(photo.url));
+    setPhotos((current) => [...current, ...loaded]);
+    setSelectedPhotoId((current) => current ?? loaded[0]?.id ?? null);
+    if (startingCount === 0) {
+      const recommended = TEMPLATES.find(
+        (item) => loaded.length >= item.min && loaded.length <= item.max,
+      );
+      if (recommended) setTemplateId(recommended.id);
+    }
+
+    if (failedCount > 0) {
+      toast.warning(`已加入 ${loaded.length} 張，${failedCount} 張無法讀取`);
+    } else if (accepted.length < imageFiles.length) {
+      toast.warning(`已加入 ${accepted.length} 張；單張成品上限為 ${MAX_PHOTOS} 張`);
+    } else {
+      toast.success(`已加入 ${loaded.length} 張照片`);
+    }
   };
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -886,6 +938,7 @@ export default function Home() {
   );
 
   const removePhoto = (id: string) => {
+    reservedPhotoCountRef.current = Math.max(0, reservedPhotoCountRef.current - 1);
     setPhotos((current) => {
       const index = current.findIndex((photo) => photo.id === id);
       const removed = current[index];
@@ -933,27 +986,114 @@ export default function Home() {
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
     const point = canvasPoint(event.clientX, event.clientY);
+    activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    const pointers = [...activePointersRef.current.values()];
+    if (pointers.length >= 2) {
+      const [first, second] = pointers;
+      const midpoint = canvasPoint((first.x + second.x) / 2, (first.y + second.y) / 2);
+      const pinchIndex =
+        selectedIndex >= 0 && pointInSlot(midpoint.x, midpoint.y, slots[selectedIndex])
+          ? selectedIndex
+          : slots.findIndex((slot) => pointInSlot(midpoint.x, midpoint.y, slot));
+      const pinchPhoto = photos[pinchIndex];
+      if (pinchPhoto) {
+        setSelectedPhotoId(pinchPhoto.id);
+        pointerGestureRef.current = {
+          mode: "pinch",
+          id: pinchPhoto.id,
+          startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+          startZoom: pinchPhoto.zoom,
+        };
+      }
+      return;
+    }
+
+    if (selectedPhoto && selectedIndex >= 0 && pointNearZoomHandle(point.x, point.y, slots[selectedIndex])) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const centerX = rect.left + (slots[selectedIndex].x + slots[selectedIndex].w / 2) * rect.width;
+      const centerY = rect.top + (slots[selectedIndex].y + slots[selectedIndex].h / 2) * rect.height;
+      pointerGestureRef.current = {
+        mode: "resize",
+        id: selectedPhoto.id,
+        pointerId: event.pointerId,
+        centerX,
+        centerY,
+        startDistance: Math.max(1, Math.hypot(event.clientX - centerX, event.clientY - centerY)),
+        startZoom: selectedPhoto.zoom,
+      };
+      return;
+    }
+
     const index = slots.findIndex((slot) => pointInSlot(point.x, point.y, slot));
     const photo = photos[index];
-    if (!photo) return;
+    if (!photo) {
+      activePointersRef.current.delete(event.pointerId);
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      return;
+    }
     setSelectedPhotoId(photo.id);
-    pointerDragRef.current = { id: photo.id, x: event.clientX, y: event.clientY };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerGestureRef.current = {
+      mode: "pan",
+      id: photo.id,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    const dragging = pointerDragRef.current;
-    if (!dragging) return;
-    const index = photos.findIndex((photo) => photo.id === dragging.id);
+    if (activePointersRef.current.has(event.pointerId)) {
+      activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    const gesture = pointerGestureRef.current;
+    if (!gesture) {
+      const point = canvasPoint(event.clientX, event.clientY);
+      const overHandle =
+        selectedIndex >= 0 && pointNearZoomHandle(point.x, point.y, slots[selectedIndex]);
+      const overPhoto = slots.some((slot, index) => photos[index] && pointInSlot(point.x, point.y, slot));
+      event.currentTarget.style.cursor = overHandle ? "nwse-resize" : overPhoto ? "grab" : "default";
+      return;
+    }
+
+    if (gesture.mode === "pinch") {
+      const pointers = [...activePointersRef.current.values()];
+      if (pointers.length < 2) return;
+      const [first, second] = pointers;
+      const distance = Math.hypot(second.x - first.x, second.y - first.y);
+      const zoom = clamp(gesture.startZoom * (distance / gesture.startDistance), 1, 3);
+      setPhotos((current) =>
+        current.map((photo) => (photo.id === gesture.id ? { ...photo, zoom } : photo)),
+      );
+      return;
+    }
+
+    if (event.pointerId !== gesture.pointerId) return;
+    if (gesture.mode === "resize") {
+      event.currentTarget.style.cursor = "nwse-resize";
+      const distance = Math.hypot(event.clientX - gesture.centerX, event.clientY - gesture.centerY);
+      const zoom = clamp(gesture.startZoom * (distance / gesture.startDistance), 1, 3);
+      setPhotos((current) =>
+        current.map((photo) => (photo.id === gesture.id ? { ...photo, zoom } : photo)),
+      );
+      return;
+    }
+
+    const index = photos.findIndex((photo) => photo.id === gesture.id);
     const slot = slots[index];
     const canvasRect = canvasRef.current?.getBoundingClientRect();
     if (!slot || !canvasRect) return;
-    const dx = (event.clientX - dragging.x) / canvasRect.width;
-    const dy = (event.clientY - dragging.y) / canvasRect.height;
+    const dx = (event.clientX - gesture.x) / canvasRect.width;
+    const dy = (event.clientY - gesture.y) / canvasRect.height;
     setPhotos((current) =>
       current.map((photo) =>
-        photo.id === dragging.id
+        photo.id === gesture.id
           ? {
               ...photo,
               focusX: clamp(photo.focusX - dx / Math.max(slot.w, 0.1), 0, 1),
@@ -962,11 +1102,15 @@ export default function Home() {
           : photo,
       ),
     );
-    pointerDragRef.current = { ...dragging, x: event.clientX, y: event.clientY };
+    pointerGestureRef.current = { ...gesture, x: event.clientX, y: event.clientY };
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
-    pointerDragRef.current = null;
+    activePointersRef.current.delete(event.pointerId);
+    const gesture = pointerGestureRef.current;
+    if (gesture?.mode === "pinch" || (gesture && gesture.pointerId === event.pointerId)) {
+      pointerGestureRef.current = null;
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -1167,9 +1311,44 @@ export default function Home() {
               <p className="eyebrow">步驟 2</p>
               <h1>調整你的成長日誌</h1>
             </div>
-            <div className="stage-hint">
-              <Move aria-hidden="true" />
-              拖曳照片調位置・滾輪縮放
+            <div className="stage-toolbar-actions">
+              <div className="stage-hint">
+                <Move aria-hidden="true" />
+                直接拖曳移動・拖藍點縮放
+              </div>
+              {selectedPhoto ? (
+                <div className="stage-photo-actions" role="toolbar" aria-label={`調整第 ${selectedIndex + 1} 張照片`}>
+                  <span className="stage-photo-label">
+                    照片 {selectedIndex + 1}
+                    <output aria-live="polite">{Math.round(selectedPhoto.zoom * 100)}%</output>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateSelected({ rotation: (selectedPhoto.rotation + 90) % 360 })}
+                    aria-label="旋轉照片 90 度"
+                    title="旋轉"
+                  >
+                    <RotateCw aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateSelected({ zoom: 1, focusX: 0.5, focusY: 0.5, rotation: 0 })}
+                    aria-label="重設照片位置與縮放"
+                    title="重設"
+                  >
+                    <Sparkles aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="stage-delete-action"
+                    onClick={() => removePhoto(selectedPhoto.id)}
+                    aria-label="移除這張照片"
+                    title="移除"
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -1185,7 +1364,7 @@ export default function Home() {
               onKeyDown={handleCanvasKeyDown}
               tabIndex={0}
               role="img"
-              aria-label={`正方形成長日誌預覽，目前使用${template.name}。選取照片後可用方向鍵移動，加減鍵縮放。`}
+              aria-label={`正方形成長日誌預覽，目前使用${template.name}。點選照片後可直接拖曳移動，使用滾輪、雙指或右下藍點縮放。`}
             />
             {!photos.length ? (
               <div className="canvas-empty-action">
@@ -1255,61 +1434,6 @@ export default function Home() {
               );
             })}
           </div>
-
-          <div className="adjust-card">
-            <div className="adjust-heading">
-              <div>
-                <p className="eyebrow">照片調整</p>
-                <h3>{selectedPhoto ? `第 ${selectedIndex + 1} 張` : "先選一張照片"}</h3>
-              </div>
-              {selectedPhoto ? <span>{Math.round(selectedPhoto.zoom * 100)}%</span> : null}
-            </div>
-            {selectedPhoto ? (
-              <>
-                <div className="zoom-row">
-                  <ZoomOut aria-hidden="true" />
-                  <Slider
-                    value={[selectedPhoto.zoom]}
-                    min={1}
-                    max={3}
-                    step={0.01}
-                    onValueChange={(value) => updateSelected({ zoom: value[0] })}
-                    aria-label="照片縮放"
-                  />
-                  <ZoomIn aria-hidden="true" />
-                </div>
-                <p className="adjust-help">在畫布上拖曳照片即可改變焦點位置。</p>
-                <div className="adjust-actions">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateSelected({ rotation: (selectedPhoto.rotation + 90) % 360 })}
-                  >
-                    <RotateCw aria-hidden="true" />
-                    旋轉
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateSelected({ zoom: 1, focusX: 0.5, focusY: 0.5, rotation: 0 })}
-                  >
-                    重設裁切
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => removePhoto(selectedPhoto.id)}>
-                    <Trash2 aria-hidden="true" />
-                    移除
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <p className="adjust-empty">加入照片後，點一下畫布中的照片就能微調。</p>
-            )}
-          </div>
-
-          <Button className="mobile-export-button" onClick={downloadImage} disabled={!photos.length}>
-            <Download aria-hidden="true" />
-            下載 2048 × 2048 PNG
-          </Button>
         </aside>
       </section>
       <Toaster position="bottom-center" richColors />
