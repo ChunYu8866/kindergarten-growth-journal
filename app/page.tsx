@@ -1420,7 +1420,14 @@ export default function Home() {
     event.preventDefault();
     const point = canvasPoint(event.clientX, event.clientY);
     activePointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Capture only keeps events coming once the pointer leaves the canvas; it is
+    // not what makes the gesture work. It throws if the pointer is already gone,
+    // and letting that through would abort the drag before it starts.
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Carry on without capture.
+    }
 
     const pointers = [...activePointersRef.current.values()];
     if (pointers.length >= 2) {
