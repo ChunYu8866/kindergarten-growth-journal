@@ -46,7 +46,7 @@ const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREVIEW_MAX_SIZE = 1600;
 
 // Decorations ship as WebP: one full-size sheet per decoration for the canvas and
-// a 240 px thumbnail for the 16 template cards, so the picker never pulls a 300 KB
+// a 240 px thumbnail for the template cards, so the picker never pulls a 300 KB
 // sheet just to paint a swatch.
 const overlayUrl = (decoration: string) => `${ASSET_BASE}/${decoration}.webp`;
 const overlayThumbUrl = (decoration: string) => `${ASSET_BASE}/${decoration}-thumb.webp`;
