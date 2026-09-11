@@ -139,7 +139,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "sunny-hero",
     name: "今日主角",
-    note: "1 張・橫式 4:3",
+    note: "1 張・滿版",
     layout: "single",
     sample: 1,
     min: 1,
@@ -154,7 +154,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "peach-pair",
     name: "左右小日子",
-    note: "2 張・正方形",
+    note: "2 張・左右滿版",
     layout: "split-v",
     sample: 2,
     min: 2,
@@ -169,7 +169,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "sky-story",
     name: "上下故事",
-    note: "2 張・橫式 4:3",
+    note: "2 張・上下滿版",
     layout: "split-h",
     sample: 2,
     min: 2,
@@ -184,7 +184,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "spring-garden",
     name: "春日花園",
-    note: "3 張・混合比例",
+    note: "3 張・上大下二",
     layout: "hero-side",
     sample: 3,
     min: 3,
@@ -199,7 +199,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "woodland-friends",
     name: "森林好朋友",
-    note: "3 張・混合比例",
+    note: "3 張・上大下二",
     layout: "hero-side",
     sample: 3,
     min: 3,
@@ -214,7 +214,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "summer-bubbles",
     name: "夏日泡泡",
-    note: "3 張・混合比例",
+    note: "3 張・上二下大",
     layout: "hero-bottom",
     sample: 3,
     min: 3,
@@ -229,7 +229,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "green-adventure",
     name: "四格探險",
-    note: "4 張・正方形",
+    note: "4 張・滿版四宮格",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -244,7 +244,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "candy-grid",
     name: "糖果四格",
-    note: "4 張・正方形",
+    note: "4 張・滿版四宮格",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -259,7 +259,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "growth-window",
     name: "成長四扇窗",
-    note: "4 張・橫式 4:3",
+    note: "4 張・寬窄四格",
     layout: "cross",
     sample: 4,
     min: 4,
@@ -274,7 +274,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "autumn-collage",
     name: "秋葉拼貼",
-    note: "4 張・混合比例",
+    note: "4 張・上大下三",
     layout: "masonry",
     sample: 4,
     min: 4,
@@ -289,7 +289,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "observation-six",
     name: "粉綠四格",
-    note: "4 張・正方形",
+    note: "4 張・滿版四宮格",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -304,7 +304,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "weekly-cluster",
     name: "三張小日子",
-    note: "3 張・正方形",
+    note: "3 張・左大右二",
     layout: "cluster",
     sample: 3,
     min: 3,
@@ -319,7 +319,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "nine-memories",
     name: "薰衣草四格",
-    note: "4 張・正方形",
+    note: "4 張・滿版四宮格",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -334,7 +334,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "timeline",
     name: "四連拍",
-    note: "4 張・正方形",
+    note: "4 張・錯落四連",
     layout: "timeline",
     sample: 4,
     min: 4,
@@ -349,7 +349,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "polaroid-book",
     name: "拍立得手帳",
-    note: "3–4 張・正方形",
+    note: "3–4 張・微斜拍立得",
     layout: "polaroid",
     sample: 4,
     min: 3,
@@ -381,31 +381,39 @@ const TEMPLATES: TemplateSpec[] = [
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+// Photos tile the whole 1:1 canvas. The decorative frame is drawn on top of them,
+// so a background margin would only shrink the photos without being seen.
+const SLOT_GAP = 0.012;
+const SLOT_RADIUS = 0.012;
+// Half / third of the canvas once the gaps between cells are taken out.
+const HALF = (1 - SLOT_GAP) / 2;
+const THIRD = (1 - SLOT_GAP * 2) / 3;
+// The uneven split used by the layouts that mix a large cell with smaller ones.
+const WIDE = 0.56;
+const NARROW = 1 - SLOT_GAP - WIDE;
+const HERO = 0.62;
+const MINOR = 1 - SLOT_GAP - HERO;
+
 function gridSlots(count: number, columns?: number): SlotRect[] {
   const safeCount = Math.max(1, count);
   const cols = columns ?? (safeCount <= 2 ? safeCount : 2);
   const rows = Math.ceil(safeCount / cols);
-  const gap = 0.018;
-  const area = { x: 0.09, y: 0.09, w: 0.82, h: 0.82 };
-  const cell = Math.min(
-    (area.w - gap * (cols - 1)) / cols,
-    (area.h - gap * (rows - 1)) / rows,
-  );
-  const totalHeight = rows * cell + gap * (rows - 1);
-  const startY = area.y + (area.h - totalHeight) / 2;
+  const cellWidth = (1 - SLOT_GAP * (cols - 1)) / cols;
+  const cellHeight = (1 - SLOT_GAP * (rows - 1)) / rows;
 
   return Array.from({ length: safeCount }, (_, index) => {
     const row = Math.floor(index / cols);
     const col = index % cols;
     const itemsInRow = Math.min(cols, safeCount - row * cols);
-    const rowWidth = itemsInRow * cell + Math.max(0, itemsInRow - 1) * gap;
-    const rowStart = area.x + (area.w - rowWidth) / 2;
+    // Centre a short final row so three photos in a 2-column grid stay balanced.
+    const rowWidth = itemsInRow * cellWidth + Math.max(0, itemsInRow - 1) * SLOT_GAP;
+    const rowStart = (1 - rowWidth) / 2;
     return {
-      x: rowStart + col * (cell + gap),
-      y: startY + row * (cell + gap),
-      w: cell,
-      h: cell,
-      radius: 0.022,
+      x: rowStart + col * (cellWidth + SLOT_GAP),
+      y: row * (cellHeight + SLOT_GAP),
+      w: cellWidth,
+      h: cellHeight,
+      radius: SLOT_RADIUS,
     };
   });
 }
@@ -413,74 +421,80 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
 function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   const n = Math.max(1, count);
   if (n === 1) {
-    return [{ x: 0.09, y: 0.1925, w: 0.82, h: 0.615, radius: 0.035 }];
+    return [{ x: 0, y: 0, w: 1, h: 1, radius: SLOT_RADIUS }];
   }
-  if (layout === "single") return gridSlots(n);
   if (layout === "split-v" && n === 2) {
-    return gridSlots(2, 2);
+    return [
+      { x: 0, y: 0, w: HALF, h: 1, radius: SLOT_RADIUS },
+      { x: HALF + SLOT_GAP, y: 0, w: HALF, h: 1, radius: SLOT_RADIUS },
+    ];
   }
   if (layout === "split-h" && n === 2) {
     return [
-      { x: 0.3, y: 0.18, w: 0.4, h: 0.3, radius: 0.025 },
-      { x: 0.3, y: 0.52, w: 0.4, h: 0.3, radius: 0.025 },
+      { x: 0, y: 0, w: 1, h: HALF, radius: SLOT_RADIUS },
+      { x: 0, y: HALF + SLOT_GAP, w: 1, h: HALF, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "hero-side" && n === 3) {
     return [
-      { x: 0.22, y: 0.09, w: 0.56, h: 0.42, radius: 0.026 },
-      { x: 0.19, y: 0.57, w: 0.3, h: 0.3, radius: 0.022 },
-      { x: 0.51, y: 0.57, w: 0.3, h: 0.3, radius: 0.022 },
+      { x: 0, y: 0, w: 1, h: HERO, radius: SLOT_RADIUS },
+      { x: 0, y: HERO + SLOT_GAP, w: HALF, h: MINOR, radius: SLOT_RADIUS },
+      { x: HALF + SLOT_GAP, y: HERO + SLOT_GAP, w: HALF, h: MINOR, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "hero-bottom" && n === 3) {
     return [
-      { x: 0.19, y: 0.13, w: 0.3, h: 0.3, radius: 0.022 },
-      { x: 0.51, y: 0.13, w: 0.3, h: 0.3, radius: 0.022 },
-      { x: 0.22, y: 0.48, w: 0.56, h: 0.42, radius: 0.026 },
-    ];
-  }
-  if (layout === "cross" && n === 4) {
-    return [
-      { x: 0.1, y: 0.17, w: 0.39, h: 0.2925, radius: 0.022 },
-      { x: 0.51, y: 0.17, w: 0.39, h: 0.2925, radius: 0.022 },
-      { x: 0.1, y: 0.5375, w: 0.39, h: 0.2925, radius: 0.022 },
-      { x: 0.51, y: 0.5375, w: 0.39, h: 0.2925, radius: 0.022 },
-    ];
-  }
-  if (layout === "masonry" && n === 4) {
-    return [
-      { x: 0.22, y: 0.08, w: 0.56, h: 0.42, radius: 0.024 },
-      { x: 0.105, y: 0.57, w: 0.25, h: 0.25, radius: 0.022 },
-      { x: 0.375, y: 0.57, w: 0.25, h: 0.25, radius: 0.022 },
-      { x: 0.645, y: 0.57, w: 0.25, h: 0.25, radius: 0.022 },
+      { x: 0, y: 0, w: HALF, h: MINOR, radius: SLOT_RADIUS },
+      { x: HALF + SLOT_GAP, y: 0, w: HALF, h: MINOR, radius: SLOT_RADIUS },
+      { x: 0, y: MINOR + SLOT_GAP, w: 1, h: HERO, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "cluster" && n === 3) {
+    // One tall photo on the left, two stacked beside it.
     return [
-      { x: 0.07, y: 0.29, w: 0.28, h: 0.28, radius: 0.02, angle: -0.035 },
-      { x: 0.36, y: 0.41, w: 0.28, h: 0.28, radius: 0.02, angle: 0.025 },
-      { x: 0.65, y: 0.27, w: 0.28, h: 0.28, radius: 0.02, angle: -0.02 },
+      { x: 0, y: 0, w: WIDE, h: 1, radius: SLOT_RADIUS },
+      { x: WIDE + SLOT_GAP, y: 0, w: NARROW, h: HALF, radius: SLOT_RADIUS },
+      { x: WIDE + SLOT_GAP, y: HALF + SLOT_GAP, w: NARROW, h: HALF, radius: SLOT_RADIUS },
+    ];
+  }
+  if (layout === "cross" && n === 4) {
+    // A 2x2 with one wide column, so the four "windows" are not all identical.
+    return [
+      { x: 0, y: 0, w: WIDE, h: HALF, radius: SLOT_RADIUS },
+      { x: WIDE + SLOT_GAP, y: 0, w: NARROW, h: HALF, radius: SLOT_RADIUS },
+      { x: 0, y: HALF + SLOT_GAP, w: WIDE, h: HALF, radius: SLOT_RADIUS },
+      { x: WIDE + SLOT_GAP, y: HALF + SLOT_GAP, w: NARROW, h: HALF, radius: SLOT_RADIUS },
+    ];
+  }
+  if (layout === "masonry" && n === 4) {
+    const strip = 1 - SLOT_GAP - 0.6;
+    return [
+      { x: 0, y: 0, w: 1, h: 0.6, radius: SLOT_RADIUS },
+      { x: 0, y: 0.6 + SLOT_GAP, w: THIRD, h: strip, radius: SLOT_RADIUS },
+      { x: THIRD + SLOT_GAP, y: 0.6 + SLOT_GAP, w: THIRD, h: strip, radius: SLOT_RADIUS },
+      { x: (THIRD + SLOT_GAP) * 2, y: 0.6 + SLOT_GAP, w: THIRD, h: strip, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "timeline" && n === 4) {
-    return Array.from({ length: n }, (_, index) => ({
-      x: 0.08 + index * 0.21,
-      y: index % 2 === 0 ? 0.29 : 0.5,
-      w: 0.19,
-      h: 0.19,
-      radius: 0.018,
-    }));
+    // Alternating heights keep the zig-zag rhythm the strip is named for.
+    return [
+      { x: 0, y: 0, w: HALF, h: WIDE, radius: SLOT_RADIUS },
+      { x: HALF + SLOT_GAP, y: 0, w: HALF, h: NARROW, radius: SLOT_RADIUS },
+      { x: 0, y: WIDE + SLOT_GAP, w: HALF, h: NARROW, radius: SLOT_RADIUS },
+      { x: HALF + SLOT_GAP, y: NARROW + SLOT_GAP, w: HALF, h: WIDE, radius: SLOT_RADIUS },
+    ];
   }
   if (layout === "polaroid" && n <= 4) {
-    const base = gridSlots(n, n <= 2 ? n : 2);
-    return base.map((slot, index) => ({
+    // Keep the tilt, so inset just enough that the rotated corners stay tidy.
+    const inset = 0.014;
+    return gridSlots(n, n <= 2 ? n : 2).map((slot, index) => ({
       ...slot,
-      x: slot.x + 0.016,
-      y: slot.y + 0.016,
-      w: slot.w - 0.032,
-      h: slot.h - 0.032,
-      radius: 0.008,
-      angle: [-0.045, 0.035, 0.04, -0.035][index],
+      x: slot.x + inset,
+      y: slot.y + inset,
+      w: slot.w - inset * 2,
+      h: slot.h - inset * 2,
+      radius: 0.006,
+      angle: [-0.03, 0.024, 0.026, -0.022][index],
     }));
   }
   return gridSlots(n);
@@ -1434,7 +1448,7 @@ export default function Home() {
                   <Sparkles />
                 </span>
                 <strong>從今天的照片開始</strong>
-                <p>每張成品最多 4 張，照片框只用 1:1 或橫式 4:3。</p>
+                <p>每張成品最多 4 張，照片會滿版鋪滿整個畫布。</p>
                 <Button onClick={() => fileInputRef.current?.click()}>
                   <Upload aria-hidden="true" />
                   選擇照片
