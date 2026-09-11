@@ -416,7 +416,9 @@ const clamp = (value: number, min: number, max: number) =>
 
 // Photos tile the whole 1:1 canvas. The decorative frame is drawn on top of them,
 // so a background margin would only shrink the photos without being seen.
-const SLOT_GAP = 0.012;
+// Without a frame around each photo this gap is the whole separation, so it is
+// narrower than it was: ~18 px in a 2048 px export.
+const SLOT_GAP = 0.009;
 const SLOT_RADIUS = 0.012;
 // The resize handle lives just inside the slot's bottom-right corner.
 const HANDLE_INSET = 0.026;
@@ -666,17 +668,22 @@ function drawSlot(
   ctx.translate(x + w / 2, y + h / 2);
   ctx.rotate(slot.angle ?? 0);
 
-  ctx.save();
-  ctx.shadowColor = "rgba(66, 48, 37, 0.14)";
-  ctx.shadowBlur = size * 0.018;
-  ctx.shadowOffsetY = size * 0.008;
-  ctx.fillStyle = template.panel;
-  // The photo remains full-bleed inside its crop while a slim frame sits outside it.
-  const frame = isPolaroid ? size * 0.014 : size * 0.006;
-  const bottomFrame = isPolaroid ? size * 0.035 : frame;
-  roundedPath(ctx, -w / 2 - frame, -h / 2 - frame, w + frame * 2, h + frame + bottomFrame, r + frame);
-  ctx.fill();
-  ctx.restore();
+  // Only the polaroid layout wears a frame; that white border with its shadow is
+  // the whole point of the look. Everywhere else the photos are full-bleed, so a
+  // frame would sit a second, lighter tone next to the background showing through
+  // the gaps, doubling every seam. The gap alone separates the photos.
+  if (isPolaroid) {
+    ctx.save();
+    ctx.shadowColor = "rgba(66, 48, 37, 0.14)";
+    ctx.shadowBlur = size * 0.018;
+    ctx.shadowOffsetY = size * 0.008;
+    ctx.fillStyle = template.panel;
+    const frame = size * 0.014;
+    const bottomFrame = size * 0.035;
+    roundedPath(ctx, -w / 2 - frame, -h / 2 - frame, w + frame * 2, h + frame + bottomFrame, r + frame);
+    ctx.fill();
+    ctx.restore();
+  }
 
   roundedPath(ctx, -w / 2, -h / 2, w, h, r);
   ctx.save();
