@@ -1698,6 +1698,15 @@ export default function Home() {
                         <ChevronRight />
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      className="photo-delete"
+                      onClick={() => removePhoto(photo.id)}
+                      aria-label={`移除照片 ${index + 1}，${photo.name}`}
+                      title="移除這張照片"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
                   </div>
                 );
               })}
