@@ -21,7 +21,6 @@ import {
   LayoutGrid,
   Move,
   RotateCw,
-  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
@@ -1272,10 +1271,6 @@ export default function Home() {
       onDrop={handleDrop}
     >
       <header className="topbar">
-        <div className="privacy-chip">
-          <ShieldCheck aria-hidden="true" />
-          照片只留在這台裝置
-        </div>
         <Button className="export-button" onClick={downloadImage} disabled={!photos.length}>
           <Download aria-hidden="true" />
           下載成品
