@@ -10,6 +10,12 @@ export const metadata: Metadata = {
     icon: `${assetBase}/favicon.svg`,
     shortcut: `${assetBase}/favicon.svg`,
   },
+  openGraph: {
+    title: "幼兒園照片成長日誌",
+    description: "將最多 4 張照片排成 1:1 成長日誌，可調整裁切與版型，照片只在本機處理。",
+    type: "website",
+    locale: "zh_TW",
+  },
 };
 
 export default function RootLayout({

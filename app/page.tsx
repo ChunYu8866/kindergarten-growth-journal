@@ -76,6 +76,32 @@ function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
   });
 }
 
+// A canvas can come back empty when the engine refuses the allocation, which is
+// how iOS fails under memory pressure: no exception, just nothing drawn. That
+// would hand the teacher a blank download with no error at all. The composition
+// always paints an opaque background, so a transparent sample means the draw
+// never landed. A thrown read is treated as fine, because the likely cause is a
+// tainted canvas rather than an empty one, and we must not reject a good sheet.
+function canvasHasContent(canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  const { width, height } = canvas;
+  if (!width || !height) return false;
+
+  const samples: Array<[number, number]> = [
+    [1, 1],
+    [width - 2, 1],
+    [1, height - 2],
+    [width - 2, height - 2],
+    [width >> 1, height >> 1],
+  ];
+  try {
+    return samples.every(([x, y]) => ctx.getImageData(x, y, 1, 1).data[3] > 0);
+  } catch {
+    return true;
+  }
+}
+
 type ExportResult = { blob: Blob; size: number; quality: number };
 
 // Encodes the composition as the largest, cleanest JPEG that still fits the
@@ -88,6 +114,8 @@ async function encodeWithinBudget(
   for (const size of EXPORT_SIZE_STEPS) {
     const canvas = render(size);
     if (!canvas) return smallest;
+    // Drop straight to a smaller canvas rather than encoding an empty one.
+    if (!canvasHasContent(canvas)) continue;
 
     for (const quality of EXPORT_QUALITY_STEPS) {
       const blob = await canvasToBlob(canvas, quality);

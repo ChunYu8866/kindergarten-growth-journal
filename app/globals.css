@@ -432,6 +432,44 @@ button {
   height: 16px;
 }
 
+/* Shown by app/error.tsx when a render fails; it is the only thing on screen,
+   so it carries its own layout rather than relying on the workspace grid. */
+.error-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.error-card {
+  width: min(100%, 420px);
+  padding: 1.6rem;
+  text-align: center;
+  border: 1px solid rgba(207, 226, 220, 0.88);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 44px rgba(51, 88, 78, 0.09);
+}
+
+.error-card h1 {
+  margin: 0 0 0.6rem;
+  color: #234f45;
+  font-size: 1.2rem;
+}
+
+.error-card p {
+  margin: 0 0 1.1rem;
+  color: #63776f;
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+.error-digest {
+  margin: 0.9rem 0 0;
+  color: #90a09a;
+  font-size: 0.72rem;
+}
+
 .empty-photo-note {
   display: flex;
   align-items: flex-start;
