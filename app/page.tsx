@@ -23,7 +23,6 @@ import {
   RotateCw,
   ShieldCheck,
   Sparkles,
-  Sprout,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -1247,7 +1246,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `芽芽成長誌-${template.name}.png`;
+      link.download = `成長日誌-${template.name}.png`;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("已下載 2048 × 2048 PNG");
@@ -1273,15 +1272,6 @@ export default function Home() {
       onDrop={handleDrop}
     >
       <header className="topbar">
-        <div className="brand-block">
-          <span className="brand-mark" aria-hidden="true">
-            <Sprout />
-          </span>
-          <div>
-            <p className="brand-name">芽芽成長誌</p>
-            <p className="brand-meta">每一個小進步，都值得被收藏</p>
-          </div>
-        </div>
         <div className="privacy-chip">
           <ShieldCheck aria-hidden="true" />
           照片只留在這台裝置

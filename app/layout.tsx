@@ -4,7 +4,7 @@ import "./globals.css";
 const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
-  title: "芽芽成長誌｜幼兒園照片成長日誌",
+  title: "幼兒園照片成長日誌",
   description: "將最多 4 張照片排成 1:1 成長日誌，可調整裁切與版型，照片只在本機處理。",
   icons: {
     icon: `${assetBase}/favicon.svg`,
