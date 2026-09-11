@@ -31,16 +31,16 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 
 const CANVAS_SIZE = 1200;
-const EXPORT_SIZE = 1080;
+const EXPORT_SIZE = 2048;
 // A finished sheet has to stay small enough to message to a parent, so exports
 // are JPEG under a hard budget. Lossless PNG was 5-8 MB, which is why the
 // format changed.
 const MAX_EXPORT_BYTES = Math.round(2.5 * 1024 * 1024);
-// 1080px leaves so much headroom under the budget that the top step is what
-// every realistic sheet actually uses. Quality still drops before pixels do,
-// and the canvas only shrinks if the whole ladder is somehow still over.
+// 2048 keeps each cell of a four-photo sheet at 1024px, which is what stops the
+// result looking soft once a phone shows it full screen. Quality still drops
+// before pixels do, and the canvas only shrinks if the ladder runs out.
 const EXPORT_QUALITY_STEPS = [0.95, 0.9, 0.84, 0.76, 0.68];
-const EXPORT_SIZE_STEPS = [EXPORT_SIZE, 960, 800];
+const EXPORT_SIZE_STEPS = [EXPORT_SIZE, 1600, 1280];
 const MAX_PHOTOS = 4;
 const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREVIEW_MAX_SIZE = 1600;
@@ -456,7 +456,7 @@ const clamp = (value: number, min: number, max: number) =>
 // Photos tile the whole 1:1 canvas. The decorative frame is drawn on top of them,
 // so a background margin would only shrink the photos without being seen.
 // Without a frame around each photo this gap is the whole separation, so it is
-// narrower than it was: ~10 px in a 1080 px export.
+// narrower than it was: ~18 px in a 2048 px export.
 const SLOT_GAP = 0.009;
 const SLOT_RADIUS = 0.012;
 // Resize handles live just inside the slot's corners, all four of them.
@@ -899,6 +899,11 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   const { template, photos, selectedId, ghostId, forExport } = options;
   ctx.canvas.width = size;
   ctx.canvas.height = size;
+  // Assigning width resets the context, so the resampling quality has to be set
+  // again here. The default is "low", which visibly softens a 4000px phone photo
+  // being drawn into a cell a fraction of that size.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = template.background;
   ctx.fillRect(0, 0, size, size);
@@ -1864,7 +1869,7 @@ export default function Home() {
               {template.name}
             </span>
             <span>{photos.length ? `${photos.length} 張照片` : "等待照片"}</span>
-            <span>1:1・1080 px</span>
+            <span>1:1・2048 px</span>
           </div>
         </section>
 
