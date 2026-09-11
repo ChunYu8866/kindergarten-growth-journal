@@ -55,7 +55,7 @@ jobs:
       - name: Verify website entrypoint
         run: |
           test -s out/index.html
-          for decoration in seasons spring woodland; do
+          for decoration in seasons spring woodland ocean rainbow dino; do
             test -s "out/decor-$decoration.webp"
             test -s "out/decor-$decoration-thumb.webp"
           done
