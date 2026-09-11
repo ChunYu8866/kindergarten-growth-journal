@@ -118,6 +118,21 @@ button {
   margin: 0;
 }
 
+.label-pointer-coarse {
+  display: none;
+}
+
+/* Phones and tablets save through the share sheet, so the button says so. */
+@media (pointer: coarse) {
+  .label-pointer-fine {
+    display: none;
+  }
+
+  .label-pointer-coarse {
+    display: inline;
+  }
+}
+
 /* Sits at the bottom of the step 1 panel, below the photo list. */
 .panel-footer {
   flex: 0 0 auto;

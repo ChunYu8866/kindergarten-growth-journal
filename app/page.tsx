@@ -887,6 +887,27 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
   };
 }
 
+// On a phone an <a download> lands in Files/Downloads, not the photo album. The
+// native share sheet is the only route into 相簿, so offer it on touch devices
+// and keep the plain download for desktop.
+const prefersShareSheet = () =>
+  typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
+const canShareFile = (file: File) =>
+  typeof navigator !== "undefined" &&
+  typeof navigator.canShare === "function" &&
+  typeof navigator.share === "function" &&
+  navigator.canShare({ files: [file] });
+
+function saveWithLink(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/i;
 
 // Windows often hands over HEIC files with an empty MIME type, so fall back to the
@@ -1330,7 +1351,9 @@ export default function Home() {
     exportingRef.current = true;
 
     try {
-      await document.fonts?.ready;
+      // Keep the awaits before navigator.share() to a minimum: Safari only allows
+      // the share sheet while the click's user activation is still valid. No text
+      // is drawn into an export, so there is no need to wait on document.fonts.
       // Never export a half-loaded sheet: wait for the decoration before drawing.
       if (template.overlay) await loadOverlay(template.overlay);
 
@@ -1348,19 +1371,31 @@ export default function Home() {
         forExport: true,
       });
 
-      exportCanvas.toBlob((blob) => {
-        if (!blob) {
-          toast.error("匯出失敗，請再試一次");
+      const blob = await new Promise<Blob | null>((resolve) => {
+        exportCanvas.toBlob(resolve, "image/png");
+      });
+      if (!blob) {
+        toast.error("匯出失敗，請再試一次");
+        return;
+      }
+
+      const fileName = `成長日誌-${template.name}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      if (prefersShareSheet() && canShareFile(file)) {
+        try {
+          await navigator.share({ files: [file] });
+          toast.success("選「儲存影像」就會存進相簿");
           return;
+        } catch (error) {
+          // Dismissing the sheet is a normal outcome, not a failure.
+          if (error instanceof Error && error.name === "AbortError") return;
+          // Anything else (no permission, share unavailable) falls back below.
         }
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `成長日誌-${template.name}.png`;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        toast.success("已下載 2048 × 2048 PNG");
-      }, "image/png");
+      }
+
+      saveWithLink(blob, fileName);
+      toast.success("已下載 2048 × 2048 PNG");
     } finally {
       exportingRef.current = false;
     }
@@ -1479,7 +1514,10 @@ export default function Home() {
           <div className="panel-footer">
             <Button className="export-button" onClick={downloadImage} disabled={!photos.length}>
               <Download aria-hidden="true" />
-              下載成品
+              {/* Touch devices get the share sheet, which is the only way into 相簿.
+                  Swapped with CSS so the label is right without client detection. */}
+              <span className="label-pointer-fine">下載成品</span>
+              <span className="label-pointer-coarse">儲存到相簿</span>
             </Button>
           </div>
         </aside>
