@@ -42,6 +42,23 @@ const PREVIEW_MAX_SIZE = 1600;
 const overlayUrl = (decoration: string) => `${ASSET_BASE}/${decoration}.webp`;
 const overlayThumbUrl = (decoration: string) => `${ASSET_BASE}/${decoration}-thumb.webp`;
 
+// Each sheet is drawn larger than the canvas so its decorated ring is pushed
+// outward and the excess bleeds off the edges, leaving the photos clearer.
+// The woodland animals sit on the bottom edge rather than in the corners, so
+// that sheet is also nudged down to tuck them further off-canvas.
+type DecorationSpec = { scale: number; offsetY: number };
+
+const DECORATIONS: Record<string, DecorationSpec> = {
+  "decor-spring": { scale: 1.24, offsetY: 0 },
+  "decor-seasons": { scale: 1.2, offsetY: 0 },
+  "decor-woodland": { scale: 1.18, offsetY: 0.05 },
+};
+
+const NO_DECORATION_TRANSFORM: DecorationSpec = { scale: 1, offsetY: 0 };
+
+const decorationSpec = (decoration: string) =>
+  DECORATIONS[decoration] ?? NO_DECORATION_TRANSFORM;
+
 const overlayCache = new Map<string, HTMLImageElement>();
 const overlayRequests = new Map<string, Promise<HTMLImageElement | null>>();
 
@@ -60,7 +77,11 @@ function loadOverlay(decoration: string): Promise<HTMLImageElement | null> {
         overlayCache.set(decoration, image);
         resolve(image);
       };
-      image.onerror = () => resolve(null);
+      image.onerror = () => {
+        // Drop the failed attempt so picking this template again retries.
+        overlayRequests.delete(decoration);
+        resolve(null);
+      };
       image.src = overlayUrl(decoration);
     });
     overlayRequests.set(decoration, pending);
@@ -134,6 +155,20 @@ type CanvasGesture =
   | { mode: "pinch"; id: string; startDistance: number; startZoom: number };
 
 const TEMPLATES: TemplateSpec[] = [
+  {
+    id: "plain-collage",
+    name: "純組圖",
+    note: "1–4 張・無裝飾",
+    layout: "adaptive",
+    sample: 4,
+    min: 1,
+    max: 4,
+    background: "#ffffff",
+    panel: "#ffffff",
+    accent: "#9bb0a9",
+    ink: "#44514d",
+    pattern: "plain",
+  },
   {
     id: "sunny-hero",
     name: "今日主角",
@@ -383,6 +418,9 @@ const clamp = (value: number, min: number, max: number) =>
 // so a background margin would only shrink the photos without being seen.
 const SLOT_GAP = 0.012;
 const SLOT_RADIUS = 0.012;
+// The resize handle lives just inside the slot's bottom-right corner.
+const HANDLE_INSET = 0.026;
+const HANDLE_HIT_RADIUS = 0.042;
 // Half / third of the canvas once the gaps between cells are taken out.
 const HALF = (1 - SLOT_GAP) / 2;
 const THIRD = (1 - SLOT_GAP * 2) / 3;
@@ -676,27 +714,40 @@ function strokeSelection(
   const w = slot.w * size;
   const h = slot.h * size;
   const r = (slot.radius ?? 0.02) * size;
+  // Photos are full-bleed, so both the ring and the handle have to sit inside the
+  // slot; drawn outside they would be clipped away at the canvas edge.
+  const handleX = w / 2 - HANDLE_INSET * size;
+  const handleY = h / 2 - HANDLE_INSET * size;
+  const ringInset = size * 0.005;
+
   ctx.save();
   ctx.translate(x + w / 2, y + h / 2);
   ctx.rotate(slot.angle ?? 0);
   ctx.strokeStyle = "#236bfe";
   ctx.lineWidth = Math.max(4, size * 0.005);
   ctx.setLineDash([size * 0.012, size * 0.007]);
-  roundedPath(ctx, -w / 2 - size * 0.006, -h / 2 - size * 0.006, w + size * 0.012, h + size * 0.012, r);
+  roundedPath(
+    ctx,
+    -w / 2 + ringInset,
+    -h / 2 + ringInset,
+    w - ringInset * 2,
+    h - ringInset * 2,
+    Math.max(0, r - ringInset),
+  );
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.fillStyle = "#236bfe";
   ctx.beginPath();
-  ctx.arc(w / 2 + size * 0.008, h / 2 + size * 0.008, size * 0.017, 0, Math.PI * 2);
+  ctx.arc(handleX, handleY, size * 0.017, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = Math.max(2, size * 0.003);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(w / 2 + size * 0.002, h / 2 + size * 0.002);
-  ctx.lineTo(w / 2 + size * 0.014, h / 2 + size * 0.014);
-  ctx.moveTo(w / 2 + size * 0.009, h / 2 + size * 0.014);
-  ctx.lineTo(w / 2 + size * 0.014, h / 2 + size * 0.009);
+  ctx.moveTo(handleX - size * 0.006, handleY - size * 0.006);
+  ctx.lineTo(handleX + size * 0.006, handleY + size * 0.006);
+  ctx.moveTo(handleX + size * 0.001, handleY + size * 0.006);
+  ctx.lineTo(handleX + size * 0.006, handleY + size * 0.001);
   ctx.stroke();
   ctx.restore();
 }
@@ -725,7 +776,12 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   // and seasonal corners overlap the photo edges instead of hiding behind them.
   if (template.overlay) {
     const overlay = overlayCache.get(template.overlay);
-    if (overlay?.complete && overlay.naturalWidth > 0) ctx.drawImage(overlay, 0, 0, size, size);
+    if (overlay?.complete && overlay.naturalWidth > 0) {
+      const { scale, offsetY } = decorationSpec(template.overlay);
+      const drawn = size * scale;
+      const inset = (size - drawn) / 2;
+      ctx.drawImage(overlay, inset, inset + offsetY * size, drawn, drawn);
+    }
   }
 
   // The selection ring is an editing affordance, so it stays above everything and
@@ -754,23 +810,28 @@ function pointInSlot(pointX: number, pointY: number, slot: SlotRect) {
 
 function pointNearZoomHandle(pointX: number, pointY: number, slot: SlotRect) {
   const point = pointInSlotSpace(pointX, pointY, slot);
-  const handleX = slot.w / 2 + 0.008;
-  const handleY = slot.h / 2 + 0.008;
-  return Math.hypot(point.x - handleX, point.y - handleY) <= 0.042;
+  const handleX = slot.w / 2 - HANDLE_INSET;
+  const handleY = slot.h / 2 - HANDLE_INSET;
+  return Math.hypot(point.x - handleX, point.y - handleY) <= HANDLE_HIT_RADIUS;
 }
 
 function TemplateMini({ template, active }: { template: TemplateSpec; active: boolean }) {
   const slots = getSlots(template.layout, template.sample);
+  const decoration = template.overlay ? decorationSpec(template.overlay) : null;
   return (
     <span
       className="template-mini"
       style={{ background: template.background, color: template.ink }}
       aria-hidden="true"
     >
-      {template.overlay ? (
+      {template.overlay && decoration ? (
         <span
           className="template-mini-overlay"
-          style={{ backgroundImage: `url(${overlayThumbUrl(template.overlay)})` }}
+          style={{
+            backgroundImage: `url(${overlayThumbUrl(template.overlay)})`,
+            // Mirrors the canvas transform: scale about the centre, then nudge down.
+            transform: `translateY(${decoration.offsetY * 100}%) scale(${decoration.scale})`,
+          }}
         />
       ) : null}
       {slots.map((slot, index) => (
@@ -796,20 +857,24 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
   const url = URL.createObjectURL(file);
   const image = new Image();
   image.decoding = "async";
-  image.src = url;
+
   try {
-    await image.decode();
-  } catch {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error(`無法讀取 ${file.name}`));
-      });
-    } catch (error) {
-      URL.revokeObjectURL(url);
-      throw error;
-    }
+    // The handlers must be attached before src is assigned. Waiting on decode()
+    // first and only then listening loses the load/error event for a format the
+    // browser cannot read (HEIC, most often), and the promise never settles.
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error(`無法讀取 ${file.name}`));
+      image.src = url;
+    });
+    // Decoding up front keeps the first draw from stalling on a large photo, but
+    // the image is already usable if it fails.
+    await image.decode().catch(() => undefined);
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    throw error;
   }
+
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name: file.name,
@@ -821,6 +886,16 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
     rotation: 0,
   };
 }
+
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|gif|webp|bmp|avif|heic|heif)$/i;
+
+// Windows often hands over HEIC files with an empty MIME type, so fall back to the
+// extension; they then fail with a message that says what to do about it.
+const isImageFile = (file: File) =>
+  file.type.startsWith("image/") || IMAGE_EXTENSIONS.test(file.name);
+
+const isUnsupportedAppleFormat = (file: File) =>
+  /\.(heic|heif)$/i.test(file.name) || /hei[cf]/i.test(file.type);
 
 type ModelContextLike = {
   registerTool: (
@@ -844,6 +919,7 @@ export default function Home() {
   const pointerGestureRef = useRef<CanvasGesture | null>(null);
   const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
   const reservedPhotoCountRef = useRef(0);
+  const exportingRef = useRef(false);
   const interactionRef = useRef<{ slots: SlotRect[]; photos: PhotoItem[] }>({
     slots: [],
     photos: [],
@@ -966,7 +1042,7 @@ export default function Home() {
   }, []);
 
   const addFiles = async (fileList: FileList | File[]) => {
-    const imageFiles = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+    const imageFiles = Array.from(fileList).filter(isImageFile);
     if (!imageFiles.length) {
       toast.error("請選擇 JPG、PNG 或其他照片檔案");
       return;
@@ -980,15 +1056,29 @@ export default function Home() {
 
     const accepted = imageFiles.slice(0, available);
     reservedPhotoCountRef.current += accepted.length;
-    const results = await Promise.allSettled(accepted.map(fileToPhoto));
-    const loaded = results
-      .filter((result): result is PromiseFulfilledResult<PhotoItem> => result.status === "fulfilled")
-      .map((result) => result.value);
-    const failedCount = accepted.length - loaded.length;
-    reservedPhotoCountRef.current = Math.max(0, reservedPhotoCountRef.current - failedCount);
 
+    let loaded: PhotoItem[] = [];
+    try {
+      const results = await Promise.allSettled(accepted.map(fileToPhoto));
+      loaded = results
+        .filter((result): result is PromiseFulfilledResult<PhotoItem> => result.status === "fulfilled")
+        .map((result) => result.value);
+    } finally {
+      // Always settle the reservation, so a failed batch cannot leave the counter
+      // inflated and permanently block adding photos.
+      reservedPhotoCountRef.current = Math.max(
+        0,
+        reservedPhotoCountRef.current - (accepted.length - loaded.length),
+      );
+    }
+
+    const failedCount = accepted.length - loaded.length;
     if (!loaded.length) {
-      toast.error("有照片無法讀取，請換一個檔案再試");
+      toast.error(
+        accepted.some(isUnsupportedAppleFormat)
+          ? "瀏覽器讀不到 HEIC 照片，請先轉成 JPG 再上傳"
+          : "有照片無法讀取，請換一個檔案再試",
+      );
       return;
     }
 
@@ -996,9 +1086,13 @@ export default function Home() {
     setPhotos((current) => [...current, ...loaded]);
     setSelectedPhotoId((current) => current ?? loaded[0]?.id ?? null);
     if (startingCount === 0) {
-      const recommended = TEMPLATES.find(
-        (item) => loaded.length >= item.min && loaded.length <= item.max,
-      );
+      // Prefer a template built for exactly this many photos, so the catch-all
+      // ranges (純組圖, 自動排版) stay opt-in rather than winning by list order.
+      const fits = (item: TemplateSpec) =>
+        loaded.length >= item.min && loaded.length <= item.max;
+      const recommended =
+        TEMPLATES.find((item) => item.min === item.max && fits(item)) ??
+        TEMPLATES.find(fits);
       if (recommended) setTemplateId(recommended.id);
     }
 
@@ -1012,8 +1106,13 @@ export default function Home() {
   };
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) await addFiles(event.target.files);
-    event.target.value = "";
+    const input = event.target;
+    try {
+      if (input.files) await addFiles(input.files);
+    } finally {
+      // Reset regardless, so picking the same file twice in a row still fires.
+      input.value = "";
+    }
   };
 
   const updateSelected = useCallback(
@@ -1225,31 +1324,46 @@ export default function Home() {
       toast.error("請先加入至少一張照片");
       return;
     }
-    await document.fonts?.ready;
-    // Never export a half-loaded sheet: wait for the decoration before drawing.
-    if (template.overlay) await loadOverlay(template.overlay);
-    const exportCanvas = document.createElement("canvas");
-    const ctx = exportCanvas.getContext("2d");
-    if (!ctx) return;
-    drawComposition(ctx, EXPORT_SIZE, {
-      template,
-      photos,
-      selectedId: null,
-      forExport: true,
-    });
-    exportCanvas.toBlob((blob) => {
-      if (!blob) {
+    // Guards the await window below; a double click would otherwise hand the
+    // browser two identical downloads.
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+
+    try {
+      await document.fonts?.ready;
+      // Never export a half-loaded sheet: wait for the decoration before drawing.
+      if (template.overlay) await loadOverlay(template.overlay);
+
+      const exportCanvas = document.createElement("canvas");
+      const ctx = exportCanvas.getContext("2d");
+      if (!ctx) {
         toast.error("匯出失敗，請再試一次");
         return;
       }
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `成長日誌-${template.name}.png`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast.success("已下載 2048 × 2048 PNG");
-    }, "image/png");
+
+      drawComposition(ctx, EXPORT_SIZE, {
+        template,
+        photos,
+        selectedId: null,
+        forExport: true,
+      });
+
+      exportCanvas.toBlob((blob) => {
+        if (!blob) {
+          toast.error("匯出失敗，請再試一次");
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `成長日誌-${template.name}.png`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast.success("已下載 2048 × 2048 PNG");
+      }, "image/png");
+    } finally {
+      exportingRef.current = false;
+    }
   };
 
   const handleDrop = async (event: DragEvent<HTMLElement>) => {
@@ -1309,6 +1423,9 @@ export default function Home() {
                     draggable
                     onDragStart={() => {
                       dragPhotoIdRef.current = photo.id;
+                    }}
+                    onDragEnd={() => {
+                      dragPhotoIdRef.current = null;
                     }}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
@@ -1418,6 +1535,8 @@ export default function Home() {
             <canvas
               ref={canvasRef}
               className="journal-canvas"
+              width={CANVAS_SIZE}
+              height={CANVAS_SIZE}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -1467,7 +1586,7 @@ export default function Home() {
               <p className="eyebrow">步驟 3</p>
               <h2>挑一個版型</h2>
             </div>
-            <span className="count-badge">16 款</span>
+            <span className="count-badge">{TEMPLATES.length} 款</span>
           </div>
           {templateIsAdapted ? (
             <p className="adapt-note">已依目前照片數自動調整版型排列。</p>

@@ -4,6 +4,8 @@
 
 網站實際載入的是壓縮後的 WebP：畫布用的全尺寸圖 `public/decor-{spring,woodland,seasons}.webp`（1254 × 1254，quality 82），版型選單縮圖用 `public/decor-{spring,woodland,seasons}-thumb.webp`（240 × 240）。三張原始 PNG 合計 3.6 MB，換成 WebP 後全部素材只剩約 1.0 MB，而且畫布只會下載目前版型用到的那一張。
 
+畫布不是以 1:1 貼上這些素材，而是放大後置中再裁掉超出的部分，讓裝飾往四邊外推、少壓到照片：春日 ×1.24、四季 ×1.20、森林 ×1.18 並額外下移 5%（森林的動物在下緣而非四角）。這些倍率定義在 `app/page.tsx` 的 `DECORATIONS`，版型縮圖用同一組值做 CSS transform。
+
 要重新產生素材時，請依下列 prompt 產出透明 PNG，再轉成同名 WebP 與 240 px 縮圖。
 
 ## 春日小花與蝴蝶
