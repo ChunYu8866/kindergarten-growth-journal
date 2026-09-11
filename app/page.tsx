@@ -32,6 +32,14 @@ import { Toaster } from "@/components/ui/sonner";
 
 const CANVAS_SIZE = 1200;
 const EXPORT_SIZE = 2048;
+// A finished sheet has to stay small enough to message to a parent, so exports
+// are JPEG under a hard 2 MB budget. A 2048px lossless PNG of four photos runs
+// 5-8 MB, which is why the format changed.
+const MAX_EXPORT_BYTES = 2 * 1024 * 1024;
+// Quality drops first, because it is far less visible than losing pixels. The
+// canvas only shrinks if the whole quality ladder is still over budget.
+const EXPORT_QUALITY_STEPS = [0.92, 0.85, 0.78, 0.7, 0.6];
+const EXPORT_SIZE_STEPS = [EXPORT_SIZE, 1600, 1280];
 const MAX_PHOTOS = 4;
 const ASSET_BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const PREVIEW_MAX_SIZE = 1600;
@@ -58,6 +66,36 @@ const NO_DECORATION_TRANSFORM: DecorationSpec = { scale: 1, offsetY: 0 };
 
 const decorationSpec = (decoration: string) =>
   DECORATIONS[decoration] ?? NO_DECORATION_TRANSFORM;
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", quality);
+  });
+}
+
+type ExportResult = { blob: Blob; size: number; quality: number };
+
+// Encodes the composition as the largest, cleanest JPEG that still fits the
+// budget, and never returns something bigger than the last thing it tried.
+async function encodeWithinBudget(
+  render: (size: number) => HTMLCanvasElement | null,
+): Promise<ExportResult | null> {
+  let smallest: ExportResult | null = null;
+
+  for (const size of EXPORT_SIZE_STEPS) {
+    const canvas = render(size);
+    if (!canvas) return smallest;
+
+    for (const quality of EXPORT_QUALITY_STEPS) {
+      const blob = await canvasToBlob(canvas, quality);
+      if (!blob) return smallest;
+      smallest = { blob, size, quality };
+      if (blob.size <= MAX_EXPORT_BYTES) return smallest;
+    }
+  }
+
+  return smallest;
+}
 
 const overlayCache = new Map<string, HTMLImageElement>();
 const overlayRequests = new Map<string, Promise<HTMLImageElement | null>>();
@@ -1555,35 +1593,33 @@ export default function Home() {
       // Never export a half-loaded sheet: wait for the decoration before drawing.
       if (template.overlay) await loadOverlay(template.overlay);
 
-      const exportCanvas = document.createElement("canvas");
-      const ctx = exportCanvas.getContext("2d");
-      if (!ctx) {
+      const result = await encodeWithinBudget((size) => {
+        const exportCanvas = document.createElement("canvas");
+        const ctx = exportCanvas.getContext("2d");
+        if (!ctx) return null;
+        drawComposition(ctx, size, {
+          template,
+          photos,
+          selectedId: null,
+          forExport: true,
+        });
+        return exportCanvas;
+      });
+
+      if (!result) {
         toast.error("匯出失敗，請再試一次");
         return;
       }
 
-      drawComposition(ctx, EXPORT_SIZE, {
-        template,
-        photos,
-        selectedId: null,
-        forExport: true,
-      });
-
-      const blob = await new Promise<Blob | null>((resolve) => {
-        exportCanvas.toBlob(resolve, "image/png");
-      });
-      if (!blob) {
-        toast.error("匯出失敗，請再試一次");
-        return;
-      }
-
-      const fileName = `成長日誌-${template.name}.png`;
-      const file = new File([blob], fileName, { type: "image/png" });
+      const { blob, size: exportedSize } = result;
+      const megabytes = blob.size / (1024 * 1024);
+      const fileName = `成長日誌-${template.name}.jpg`;
+      const file = new File([blob], fileName, { type: "image/jpeg" });
 
       if (prefersShareSheet() && canShareFile(file)) {
         try {
           await navigator.share({ files: [file] });
-          toast.success("選「儲存影像」就會存進相簿");
+          toast.success(`選「儲存影像」就會存進相簿（${megabytes.toFixed(1)} MB）`);
           return;
         } catch (error) {
           // Dismissing the sheet is a normal outcome, not a failure.
@@ -1593,7 +1629,7 @@ export default function Home() {
       }
 
       saveWithLink(blob, fileName);
-      toast.success("已下載 2048 × 2048 PNG");
+      toast.success(`已下載 ${exportedSize} × ${exportedSize} JPG（${megabytes.toFixed(1)} MB）`);
     } finally {
       exportingRef.current = false;
     }
