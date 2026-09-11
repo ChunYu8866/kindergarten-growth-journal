@@ -975,9 +975,11 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
       image.onerror = () => reject(new Error(`無法讀取 ${file.name}`));
       image.src = url;
     });
-    // Decoding up front keeps the first draw from stalling on a large photo, but
-    // the image is already usable if it fails.
-    await image.decode().catch(() => undefined);
+    // Never await decode(). A detached image in a throttled or hidden tab can
+    // leave that promise pending forever (confirmed in a backgrounded tab), which
+    // would hang the whole batch exactly the way the old code did. Once load has
+    // fired the image is drawable, so start decoding and move on without it.
+    void image.decode().catch(() => undefined);
   } catch (error) {
     URL.revokeObjectURL(url);
     throw error;
