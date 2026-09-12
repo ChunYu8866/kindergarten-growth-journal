@@ -836,8 +836,8 @@ button {
 
 .template-mini-overlay {
   position: absolute;
-  /* Mirror the canvas layer order: decoration is behind the photo slots. */
-  z-index: 0;
+  /* Mirror the canvas layer order: decoration sits above the full photo slots. */
+  z-index: 2;
   inset: 0;
   background-position: center;
   background-repeat: no-repeat;

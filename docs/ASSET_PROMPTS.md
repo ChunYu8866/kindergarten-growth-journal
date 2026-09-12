@@ -1,10 +1,10 @@
 # 原創裝飾素材生成紀錄
 
-以下六張素材皆使用內建 ImageGen 產生，原始輸出為 1254 × 1254、透明背景 PNG。
+以下九張素材皆使用內建 ImageGen 產生，原始輸出為 1254 × 1254、透明背景 PNG。
 
-網站實際載入的是壓縮後的 WebP：畫布用的全尺寸圖 `public/decor-{spring,woodland,seasons,ocean,rainbow,dino}.webp`（1254 × 1254，quality 82），版型選單縮圖用對應的 `-thumb.webp`（240 × 240）。六組完整圖與縮圖合計約 1.7 MB，而且畫布只會下載目前版型用到的那一張。
+網站實際載入的是壓縮後的 WebP：畫布用的全尺寸圖 `public/decor-{spring,woodland,seasons,ocean,rainbow,dino,farm,space,toys}.webp`（1254 × 1254，quality 82），版型選單縮圖用對應的 `-thumb.webp`（240 × 240）。九組完整圖與縮圖合計約 2.2 MB，而且畫布只會下載目前版型用到的那一張。
 
-畫布不是以 1:1 貼上這些素材，而是放大後置中再裁掉超出的部分，讓裝飾留在外圍：春日 ×1.24、四季 ×1.20、森林 ×1.18 並下移 5%、海洋 ×1.20 並下移 1%、彩虹 ×1.20、恐龍 ×1.18 並下移 2%。這些倍率定義在 `app/page.tsx` 的 `DECORATIONS`，版型縮圖用同一組值做 CSS transform；照片相框繪製在裝飾上方，所以裝飾不會蓋住照片內容。
+畫布不是以 1:1 貼上這些素材，而是放大後置中再裁掉超出的部分，讓裝飾留在外圍：春日 ×1.24、四季 ×1.20、森林 ×1.18 並下移 5%、海洋 ×1.20 並下移 1%、彩虹 ×1.20、恐龍 ×1.18 並下移 2%、農場 ×1.18 並下移 2%、太空 ×1.16、玩具 ×1.18 並下移 1%。這些倍率定義在 `app/page.tsx` 的 `DECORATIONS`，版型縮圖用同一組值做 CSS transform。成品圖層依序為底色／紋理、滿版照片、透明裝飾，因此裝飾會自然疊在照片外緣。
 
 要重新產生素材時，請依下列 prompt 產出透明 PNG，再轉成同名 WebP 與 240 px 縮圖。
 
@@ -102,4 +102,61 @@ Color palette: mint green, muted mustard yellow, warm terracotta, sage, and smal
 Text: none.
 Constraints: true transparent PNG output with preserved alpha; no opaque or semi-opaque background sheet; fully transparent central opening; original illustration; clean web-overlay asset.
 Avoid: any letters, words, numbers, logo, signature, watermark, labels, UI, mockup, paper rectangle, white background, scenery filling the canvas, large dinosaur in the center, fierce teeth, predators attacking, scary expressions, realistic reptile rendering, dense clutter, or any object entering the central window.
+```
+
+## 農場好朋友
+
+```text
+Use case: illustration-story
+Asset type: original transparent PNG decorative border overlay for a square kindergarten growth-photo template
+Primary request: create a cheerful farm-friends border for a preschool growth album
+Scene/backdrop: a genuinely transparent canvas with alpha; no farm landscape, sky, paper, white, colored, or checkerboard background
+Subject: one small gentle lamb, one friendly calf, one cheerful chick, sunflowers, green leaves, and sparse grass tufts arranged around the extreme perimeter
+Style/medium: warm children's-picture-book watercolor with rounded friendly forms, soft pigment texture inside the objects, and clean cutout edges
+Composition/framing: square 1:1; separate corner clusters with a large uninterrupted central window covering at least 70% of the canvas completely empty and transparent; no subject crosses the main photo area
+Color palette: sunflower yellow, warm cream, honey brown, leaf green, and small peach accents
+Constraints: true transparent PNG alpha; no opaque backdrop; no text, letters, numbers, logos, signatures, or watermark; preschool-friendly expressions
+Avoid: photorealism, dense farm scenery, fences across the centre, scary animals, heavy outlines, clutter, or any decoration crossing the central window
+```
+
+## 星球探險
+
+```text
+Use case: illustration-story
+Asset type: original transparent PNG decorative border overlay for a square kindergarten growth-photo template
+Primary request: create a gentle space-adventure border for a preschool growth album
+Scene/backdrop: a genuinely transparent canvas with alpha; no dark sky, nebula, paper, white, colored, checkerboard, or other simulated transparency background
+Subject: one small friendly rocket, pastel planets, a crescent moon, stars, clouds, shooting-star accents, and one tiny friendly astronaut motif, all confined to the perimeter
+Style/medium: soft children's-picture-book watercolor, rounded friendly shapes, subtle pigment texture, clean isolated edges
+Composition/framing: square 1:1; airy corner clusters and sparse edge accents; keep at least 70% of the canvas as one uninterrupted fully transparent central photo window
+Color palette: powder blue, coral red, butter yellow, lavender, mint, and soft white
+Constraints: true transparent PNG alpha; no opaque or translucent background; no text, letters, numbers, logos, signatures, or watermark
+Avoid: photorealism, scary space imagery, dense star field, dark background, clutter, or any object crossing the central window
+```
+
+生成器第一次把棋盤格畫進背景，因此另以以下精準編修 prompt 只移除背景：
+
+```text
+Use case: background-extraction
+Asset type: transparent decorative border overlay for a square kindergarten growth-photo template
+Input image: edit target; preserve the illustrated rocket, moon, astronaut, planets, clouds, shooting stars, and small perimeter accents exactly in their current watercolor style, positions, scale, colors, and expressions.
+Primary request: remove only the gray checkerboard and every background pixel, replacing the entire unused canvas and central opening with genuine alpha transparency.
+Composition/framing: keep the original exact square 1:1 framing and all decorative objects confined to the outer perimeter; maintain the large uninterrupted central opening.
+Constraints: change only the background; preserve every illustrated object and its clean edge; output a true transparent PNG with a fully transparent central area; no white or colored backdrop; no checkerboard pattern; no text, letters, numbers, logos, signature, or watermark.
+Avoid: redesigning, moving, resizing, adding, or deleting the decorative subjects; opaque or translucent central wash; fake transparency pattern.
+```
+
+## 玩具同樂
+
+```text
+Use case: illustration-story
+Asset type: original transparent PNG decorative border overlay for a square kindergarten growth-photo template
+Primary request: create a playful toys-and-creativity border for a preschool growth album
+Scene/backdrop: a genuinely transparent canvas with alpha; no playroom, floor, paper, white, colored, or checkerboard background
+Subject: wooden toy trains, plain building blocks without markings, crayons, and one simple pinwheel arranged only around the outer corners and perimeter
+Style/medium: warm children's-picture-book watercolor with tactile wooden texture, soft pigment edges, cheerful simple forms, and clean cutouts
+Composition/framing: square 1:1; sparse separated corner vignettes; keep at least 70% of the canvas as one uninterrupted completely transparent central photo window
+Color palette: coral red, mustard yellow, sky blue, mint green, warm natural wood, and a small lavender accent
+Constraints: true transparent PNG alpha; blocks must contain no letters or numbers; no text, logos, signatures, watermark, UI, or opaque backdrop
+Avoid: alphabet blocks, brand marks, sharp toys, clutter, photorealism, hard black outlines, or any object crossing the central window
 ```

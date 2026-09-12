@@ -66,6 +66,9 @@ const DECORATIONS: Record<string, DecorationSpec> = {
   "decor-ocean": { scale: 1.2, offsetY: 0.01 },
   "decor-rainbow": { scale: 1.2, offsetY: 0 },
   "decor-dino": { scale: 1.18, offsetY: 0.02 },
+  "decor-farm": { scale: 1.18, offsetY: 0.02 },
+  "decor-space": { scale: 1.16, offsetY: 0 },
+  "decor-toys": { scale: 1.18, offsetY: 0.01 },
 };
 
 const NO_DECORATION_TRANSFORM: DecorationSpec = { scale: 1, offsetY: 0 };
@@ -513,6 +516,51 @@ const TEMPLATES: TemplateSpec[] = [
     overlay: "decor-dino",
   },
   {
+    id: "farm-friends",
+    name: "農場好朋友",
+    note: "2 張・上下大片",
+    layout: "split-h",
+    sample: 2,
+    min: 2,
+    max: 2,
+    background: "#fff5d9",
+    panel: "#fffdf7",
+    accent: "#d69a45",
+    ink: "#5d4a2d",
+    pattern: "dots",
+    overlay: "decor-farm",
+  },
+  {
+    id: "space-dream",
+    name: "星球探險",
+    note: "1 張・滿版主圖",
+    layout: "single",
+    sample: 1,
+    min: 1,
+    max: 1,
+    background: "#e9efff",
+    panel: "#ffffff",
+    accent: "#7787d8",
+    ink: "#3e4775",
+    pattern: "dots",
+    overlay: "decor-space",
+  },
+  {
+    id: "toy-playtime",
+    name: "玩具同樂",
+    note: "4 張・滿版四格",
+    layout: "grid",
+    sample: 4,
+    min: 4,
+    max: 4,
+    background: "#fff0e8",
+    panel: "#ffffff",
+    accent: "#e4826f",
+    ink: "#65423b",
+    pattern: "confetti",
+    overlay: "decor-toys",
+  },
+  {
     id: "adaptive",
     name: "自動排版",
     note: "1–4 張・自動適配",
@@ -532,10 +580,10 @@ const TEMPLATES: TemplateSpec[] = [
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-// Every photo frame is either square or horizontal 4:3. The outer margin keeps
-// the illustration visible without letting it cover the photo content.
-const SLOT_GAP = 0.018;
-const SLOT_RADIUS = 0.022;
+// Every photo frame is either square or horizontal 4:3. Frames use almost the
+// whole canvas; transparent decorations are layered over their outer edges.
+const SLOT_GAP = 0.015;
+const SLOT_RADIUS = 0.018;
 // Resize handles live just inside the slot's corners, all four of them.
 const HANDLE_INSET = 0.026;
 const HANDLE_HIT_RADIUS = 0.042;
@@ -553,7 +601,7 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
   const safeCount = Math.max(1, count);
   const cols = columns ?? (safeCount <= 2 ? safeCount : 2);
   const rows = Math.ceil(safeCount / cols);
-  const area = { x: 0.09, y: 0.09, w: 0.82, h: 0.82 };
+  const area = { x: 0.035, y: 0.035, w: 0.93, h: 0.93 };
   const cell = Math.min(
     (area.w - SLOT_GAP * (cols - 1)) / cols,
     (area.h - SLOT_GAP * (rows - 1)) / rows,
@@ -581,66 +629,68 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
 function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   const n = Math.max(1, count);
   if (n === 1) {
-    return [{ x: 0.09, y: 0.1925, w: 0.82, h: 0.615, radius: 0.035 }];
+    return [{ x: 0.02, y: 0.02, w: 0.96, h: 0.96, radius: 0.026 }];
   }
   if (layout === "split-v" && n === 2) {
-    return gridSlots(2, 2);
+    return [
+      { x: 0.015, y: 0.24, w: 0.48, h: 0.48, radius: SLOT_RADIUS },
+      { x: 0.505, y: 0.24, w: 0.48, h: 0.48, radius: SLOT_RADIUS },
+    ];
   }
   if (layout === "split-h" && n === 2) {
     return [
-      { x: 0.3, y: 0.18, w: 0.4, h: 0.3, radius: SLOT_RADIUS },
-      { x: 0.3, y: 0.52, w: 0.4, h: 0.3, radius: SLOT_RADIUS },
+      { x: 0.18, y: 0.01, w: 0.64, h: 0.48, radius: SLOT_RADIUS },
+      { x: 0.18, y: 0.51, w: 0.64, h: 0.48, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "hero-side" && n === 3) {
     return [
-      { x: 0.22, y: 0.09, w: 0.56, h: 0.42, radius: SLOT_RADIUS },
-      { x: 0.19, y: 0.57, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
-      { x: 0.51, y: 0.57, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
+      { x: 0.16, y: 0.015, w: 0.68, h: 0.51, radius: SLOT_RADIUS },
+      { x: 0.035, y: 0.545, w: 0.44, h: 0.44, radius: SLOT_RADIUS },
+      { x: 0.525, y: 0.545, w: 0.44, h: 0.44, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "hero-bottom" && n === 3) {
     return [
-      { x: 0.19, y: 0.13, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
-      { x: 0.51, y: 0.13, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
-      { x: 0.22, y: 0.48, w: 0.56, h: 0.42, radius: SLOT_RADIUS },
+      { x: 0.035, y: 0.015, w: 0.44, h: 0.44, radius: SLOT_RADIUS },
+      { x: 0.525, y: 0.015, w: 0.44, h: 0.44, radius: SLOT_RADIUS },
+      { x: 0.16, y: 0.475, w: 0.68, h: 0.51, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "cluster" && n === 3) {
     return [
-      { x: 0.07, y: 0.29, w: 0.28, h: 0.28, radius: SLOT_RADIUS, angle: -0.035 },
-      { x: 0.36, y: 0.41, w: 0.28, h: 0.28, radius: SLOT_RADIUS, angle: 0.025 },
-      { x: 0.65, y: 0.27, w: 0.28, h: 0.28, radius: SLOT_RADIUS, angle: -0.02 },
+      { x: 0.03, y: 0.035, w: 0.45, h: 0.45, radius: SLOT_RADIUS, angle: -0.025 },
+      { x: 0.52, y: 0.035, w: 0.45, h: 0.45, radius: SLOT_RADIUS, angle: 0.022 },
+      { x: 0.275, y: 0.515, w: 0.45, h: 0.45, radius: SLOT_RADIUS, angle: -0.012 },
     ];
   }
   if (layout === "cross" && n === 4) {
     return [
-      { x: 0.1, y: 0.17, w: 0.39, h: 0.2925, radius: SLOT_RADIUS },
-      { x: 0.51, y: 0.17, w: 0.39, h: 0.2925, radius: SLOT_RADIUS },
-      { x: 0.1, y: 0.5375, w: 0.39, h: 0.2925, radius: SLOT_RADIUS },
-      { x: 0.51, y: 0.5375, w: 0.39, h: 0.2925, radius: SLOT_RADIUS },
+      { x: 0.025, y: 0.135, w: 0.46, h: 0.345, radius: SLOT_RADIUS },
+      { x: 0.515, y: 0.135, w: 0.46, h: 0.345, radius: SLOT_RADIUS },
+      { x: 0.025, y: 0.52, w: 0.46, h: 0.345, radius: SLOT_RADIUS },
+      { x: 0.515, y: 0.52, w: 0.46, h: 0.345, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "masonry" && n === 4) {
     return [
-      { x: 0.22, y: 0.08, w: 0.56, h: 0.42, radius: SLOT_RADIUS },
-      { x: 0.105, y: 0.57, w: 0.25, h: 0.25, radius: SLOT_RADIUS },
-      { x: 0.375, y: 0.57, w: 0.25, h: 0.25, radius: SLOT_RADIUS },
-      { x: 0.645, y: 0.57, w: 0.25, h: 0.25, radius: SLOT_RADIUS },
+      { x: 0.14, y: 0.015, w: 0.72, h: 0.54, radius: SLOT_RADIUS },
+      { x: 0.025, y: 0.675, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
+      { x: 0.35, y: 0.675, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
+      { x: 0.675, y: 0.675, w: 0.3, h: 0.3, radius: SLOT_RADIUS },
     ];
   }
   if (layout === "timeline" && n === 4) {
-    return Array.from({ length: 4 }, (_, index) => ({
-      x: 0.08 + index * 0.21,
-      y: index % 2 === 0 ? 0.29 : 0.5,
-      w: 0.19,
-      h: 0.19,
-      radius: SLOT_RADIUS,
-    }));
+    return [
+      { x: 0.04, y: 0.04, w: 0.44, h: 0.44, radius: SLOT_RADIUS, angle: -0.018 },
+      { x: 0.52, y: 0.04, w: 0.44, h: 0.44, radius: SLOT_RADIUS, angle: 0.018 },
+      { x: 0.04, y: 0.52, w: 0.44, h: 0.44, radius: SLOT_RADIUS, angle: 0.014 },
+      { x: 0.52, y: 0.52, w: 0.44, h: 0.44, radius: SLOT_RADIUS, angle: -0.014 },
+    ];
   }
   if (layout === "polaroid" && n <= 4) {
     // Keep the tilt, so inset just enough that the rotated corners stay tidy.
-    const inset = 0.016;
+    const inset = 0.012;
     return gridSlots(n, n <= 2 ? n : 2).map((slot, index) => ({
       ...slot,
       x: slot.x + inset,
@@ -979,8 +1029,13 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   ctx.fillRect(0, 0, size, size);
   drawPattern(ctx, size, template);
 
-  // Decorations are part of the background. Photo frames are painted afterward,
-  // so flowers and characters never cover the actual photo content.
+  const slotCount = photos.length || template.sample;
+  const slots = getSlots(template.layout, slotCount);
+  slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
+
+  // Requested export order: base colour/pattern -> full photo frames -> decoration.
+  // The transparent centre preserves the main photo while edge illustrations sit
+  // naturally over the outer crop, like a physical scrapbook sticker layer.
   if (template.overlay) {
     const overlay = overlayCache.get(template.overlay);
     if (overlay?.complete && overlay.naturalWidth > 0) {
@@ -990,10 +1045,6 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
       ctx.drawImage(overlay, inset, inset + offsetY * size, drawn, drawn);
     }
   }
-
-  const slotCount = photos.length || template.sample;
-  const slots = getSlots(template.layout, slotCount);
-  slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
 
   // Editing affordances stay above everything and never reach the export.
   if (!forExport && ghostId) {

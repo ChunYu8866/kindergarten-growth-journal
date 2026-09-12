@@ -45,3 +45,5 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+# Local full-resolution ImageGen intermediates; published assets live in /public.
+/generated-assets/
