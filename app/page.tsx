@@ -171,6 +171,7 @@ type LayoutKind =
   | "hero-side"
   | "hero-bottom"
   | "grid"
+  | "seamless-grid"
   | "cross"
   | "masonry"
   | "cluster"
@@ -561,6 +562,20 @@ const TEMPLATES: TemplateSpec[] = [
     overlay: "decor-toys",
   },
   {
+    id: "clean-four",
+    name: "純淨四拼",
+    note: "4 張・無裝飾滿版",
+    layout: "seamless-grid",
+    sample: 4,
+    min: 4,
+    max: 4,
+    background: "#ffffff",
+    panel: "#ffffff",
+    accent: "#73958c",
+    ink: "#3f514c",
+    pattern: "plain",
+  },
+  {
     id: "adaptive",
     name: "自動排版",
     note: "1–4 張・自動適配",
@@ -581,7 +596,7 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
 // Every photo frame is either square or horizontal 4:3. Frames use almost the
-// whole canvas; transparent decorations are layered over their outer edges.
+// whole canvas; decorated variants layer transparent artwork over the edges.
 const SLOT_GAP = 0.015;
 const SLOT_RADIUS = 0.018;
 // Resize handles live just inside the slot's corners, all four of them.
@@ -628,6 +643,14 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
 
 function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   const n = Math.max(1, count);
+  if (layout === "seamless-grid" && n === 4) {
+    return [
+      { x: 0, y: 0, w: 0.5, h: 0.5, radius: 0 },
+      { x: 0.5, y: 0, w: 0.5, h: 0.5, radius: 0 },
+      { x: 0, y: 0.5, w: 0.5, h: 0.5, radius: 0 },
+      { x: 0.5, y: 0.5, w: 0.5, h: 0.5, radius: 0 },
+    ];
+  }
   if (n === 1) {
     return [{ x: 0.02, y: 0.02, w: 0.96, h: 0.96, radius: 0.026 }];
   }
@@ -876,19 +899,21 @@ function drawSlot(
   const h = slot.h * size;
   const r = (slot.radius ?? 0.02) * size;
   const isPolaroid = template.layout === "polaroid";
+  const isSeamless = template.layout === "seamless-grid";
 
   ctx.save();
   ctx.translate(x + w / 2, y + h / 2);
   ctx.rotate(slot.angle ?? 0);
 
-  // Every photo gets a clean outer border while the image itself remains plain
-  // and cover-fills the entire inner frame. Polaroids keep a wider lower edge.
+  // Regular templates get a clean outer border while the image cover-fills the
+  // inner frame. Polaroids keep a wider lower edge; seamless-grid deliberately
+  // removes both the border and shadow so its four photos meet edge to edge.
   ctx.save();
-  ctx.shadowColor = "rgba(66, 48, 37, 0.14)";
-  ctx.shadowBlur = isPolaroid ? size * 0.018 : size * 0.008;
-  ctx.shadowOffsetY = isPolaroid ? size * 0.008 : size * 0.003;
+  ctx.shadowColor = isSeamless ? "transparent" : "rgba(66, 48, 37, 0.14)";
+  ctx.shadowBlur = isSeamless ? 0 : isPolaroid ? size * 0.018 : size * 0.008;
+  ctx.shadowOffsetY = isSeamless ? 0 : isPolaroid ? size * 0.008 : size * 0.003;
   ctx.fillStyle = template.panel;
-  const frame = isPolaroid ? size * 0.014 : size * 0.006;
+  const frame = isSeamless ? 0 : isPolaroid ? size * 0.014 : size * 0.006;
   const bottomFrame = isPolaroid ? size * 0.035 : frame;
   roundedPath(
     ctx,
