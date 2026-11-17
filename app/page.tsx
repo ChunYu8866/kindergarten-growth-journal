@@ -211,9 +211,9 @@ type PhotoItem = {
   name: string;
   url: string;
   image: HTMLImageElement;
-  zoom: number;
-  focusX: number;
-  focusY: number;
+  frameScale: number;
+  offsetX: number;
+  offsetY: number;
   rotation: number;
 };
 
@@ -249,7 +249,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "sunny-hero",
     name: "今日主角",
-    note: "1 張・橫式 4:3",
+    note: "1 張・完整照片",
     layout: "single",
     sample: 1,
     min: 1,
@@ -264,7 +264,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "peach-pair",
     name: "左右小日子",
-    note: "2 張・左右方格",
+    note: "2 張・左右排列",
     layout: "split-v",
     sample: 2,
     min: 2,
@@ -279,7 +279,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "sky-story",
     name: "上下故事",
-    note: "2 張・上下橫框",
+    note: "2 張・上下排列",
     layout: "split-h",
     sample: 2,
     min: 2,
@@ -339,7 +339,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "green-adventure",
     name: "四格探險",
-    note: "4 張・方形四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -354,7 +354,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "candy-grid",
     name: "糖果四格",
-    note: "4 張・方形四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -369,7 +369,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "growth-window",
     name: "成長四扇窗",
-    note: "4 張・橫式四格",
+    note: "4 張・四格排列",
     layout: "cross",
     sample: 4,
     min: 4,
@@ -399,7 +399,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "observation-six",
     name: "粉綠四格",
-    note: "4 張・方形四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -414,7 +414,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "weekly-cluster",
     name: "三張小日子",
-    note: "3 張・方形錯落",
+    note: "3 張・錯落排列",
     layout: "cluster",
     sample: 3,
     min: 3,
@@ -429,7 +429,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "nine-memories",
     name: "薰衣草四格",
-    note: "4 張・方形四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -459,7 +459,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "polaroid-book",
     name: "拍立得手帳",
-    note: "3–4 張・微斜拍立得",
+    note: "3–4 張・微斜排列",
     layout: "polaroid",
     sample: 4,
     min: 3,
@@ -474,7 +474,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "ocean-friends",
     name: "海洋好朋友",
-    note: "2 張・橫式雙格",
+    note: "2 張・雙格排列",
     layout: "split-h",
     sample: 2,
     min: 2,
@@ -489,7 +489,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "rainbow-clouds",
     name: "彩虹雲朵",
-    note: "3 張・方形錯落",
+    note: "3 張・錯落排列",
     layout: "cluster",
     sample: 3,
     min: 3,
@@ -504,7 +504,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "dino-adventure",
     name: "恐龍探險",
-    note: "4 張・方形四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -534,7 +534,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "space-dream",
     name: "星球探險",
-    note: "1 張・滿版主圖",
+    note: "1 張・主圖",
     layout: "single",
     sample: 1,
     min: 1,
@@ -549,7 +549,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "toy-playtime",
     name: "玩具同樂",
-    note: "4 張・滿版四格",
+    note: "4 張・四格排列",
     layout: "grid",
     sample: 4,
     min: 4,
@@ -564,7 +564,7 @@ const TEMPLATES: TemplateSpec[] = [
   {
     id: "clean-four",
     name: "純淨四拼",
-    note: "4 張・無裝飾滿版",
+    note: "4 張・純色排列",
     layout: "seamless-grid",
     sample: 4,
     min: 4,
@@ -595,8 +595,7 @@ const TEMPLATES: TemplateSpec[] = [
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-// Every photo frame is either square or horizontal 4:3. Frames use almost the
-// whole canvas; decorated variants layer transparent artwork over the edges.
+// Photos retain their own proportions inside each template position.
 const SLOT_GAP = 0.015;
 const SLOT_RADIUS = 0.018;
 // Resize handles live just inside the slot's corners, all four of them.
@@ -609,9 +608,8 @@ const HANDLE_CORNERS = [
   { sx: 1, sy: 1, cursor: "nwse-resize" },
 ] as const;
 
-// A photo can never zoom below cover, or the frame would show gaps.
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 5;
+const MIN_SCALE = 0.05;
+const MAX_SCALE = 10;
 function gridSlots(count: number, columns?: number): SlotRect[] {
   const safeCount = Math.max(1, count);
   const cols = columns ?? (safeCount <= 2 ? safeCount : 2);
@@ -641,7 +639,7 @@ function gridSlots(count: number, columns?: number): SlotRect[] {
   });
 }
 
-function getSlots(layout: LayoutKind, count: number): SlotRect[] {
+function getBaseSlots(layout: LayoutKind, count: number): SlotRect[] {
   const n = Math.max(1, count);
   if (layout === "seamless-grid" && n === 4) {
     return [
@@ -727,6 +725,19 @@ function getSlots(layout: LayoutKind, count: number): SlotRect[] {
   return gridSlots(n);
 }
 
+function getSlots(layout: LayoutKind, count: number, photos: PhotoItem[] = []): SlotRect[] {
+  return getBaseSlots(layout, count).map((slot, index) => {
+    const photo = photos[index];
+    const rotated = photo && Math.abs(photo.rotation % 180) === 90;
+    const imageWidth = photo ? (rotated ? photo.image.naturalHeight : photo.image.naturalWidth) : 4;
+    const imageHeight = photo ? (rotated ? photo.image.naturalWidth : photo.image.naturalHeight) : 3;
+    const fit = Math.min(slot.w / imageWidth, slot.h / imageHeight) * (photo?.frameScale ?? 1);
+    const w = imageWidth * fit;
+    const h = imageHeight * fit;
+    return { ...slot, x: slot.x + (slot.w - w) / 2 + (photo?.offsetX ?? 0), y: slot.y + (slot.h - h) / 2 + (photo?.offsetY ?? 0), w, h, radius: 0 };
+  });
+}
+
 function roundedPath(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -745,135 +756,17 @@ function roundedPath(
   ctx.closePath();
 }
 
-function drawPattern(ctx: CanvasRenderingContext2D, size: number, template: TemplateSpec) {
-  if (template.pattern === "plain") return;
-  ctx.save();
-  ctx.globalAlpha = 0.16;
-  ctx.strokeStyle = template.accent;
-  ctx.fillStyle = template.accent;
-  ctx.lineWidth = size * 0.003;
-
-  if (template.pattern === "dots" || template.pattern === "confetti") {
-    const step = template.pattern === "dots" ? size * 0.075 : size * 0.095;
-    for (let y = step * 0.55; y < size; y += step) {
-      for (let x = step * 0.55; x < size; x += step) {
-        if (template.pattern === "dots") {
-          ctx.beginPath();
-          ctx.arc(x, y, size * 0.0045, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(((x + y) / step) % 2 ? 0.5 : -0.5);
-          ctx.fillRect(-size * 0.008, -size * 0.002, size * 0.016, size * 0.004);
-          ctx.restore();
-        }
-      }
-    }
-  }
-
-  if (template.pattern === "stripes") {
-    for (let x = -size; x < size * 2; x += size * 0.085) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x + size, size);
-      ctx.stroke();
-    }
-  }
-
-  if (template.pattern === "grid") {
-    for (let pos = size * 0.04; pos < size; pos += size * 0.06) {
-      ctx.beginPath();
-      ctx.moveTo(pos, 0);
-      ctx.lineTo(pos, size);
-      ctx.moveTo(0, pos);
-      ctx.lineTo(size, pos);
-      ctx.stroke();
-    }
-  }
-
-  if (template.pattern === "waves") {
-    for (let y = size * 0.05; y < size; y += size * 0.095) {
-      ctx.beginPath();
-      for (let x = 0; x <= size; x += size * 0.015) {
-        const py = y + Math.sin((x / size) * Math.PI * 8) * size * 0.006;
-        if (x === 0) ctx.moveTo(x, py);
-        else ctx.lineTo(x, py);
-      }
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-
-// How far the photo can travel inside its frame at a given zoom, in the same
-// pixel space the frame is measured in. Drawing and every gesture read their
-// numbers from here, so a drag can track the pointer exactly.
-function photoShiftRange(photo: PhotoItem, zoom: number, width: number, height: number) {
-  const image = photo.image;
-  if (!image.naturalWidth || !image.naturalHeight) return { x: 0, y: 0, scale: 0 };
-  const rotated = Math.abs(photo.rotation % 180) === 90;
-  const effectiveWidth = rotated ? image.naturalHeight : image.naturalWidth;
-  const effectiveHeight = rotated ? image.naturalWidth : image.naturalHeight;
-  const scale = Math.max(width / effectiveWidth, height / effectiveHeight) * zoom;
-  return {
-    x: Math.max(0, (effectiveWidth * scale - width) / 2),
-    y: Math.max(0, (effectiveHeight * scale - height) / 2),
-    scale,
-  };
-}
-
-const shiftFromFocus = (focus: number, range: number) => (0.5 - focus) * range * 2;
-
-const focusFromShift = (shift: number, range: number) =>
-  range > 0 ? clamp(0.5 - shift / (range * 2), 0, 1) : 0.5;
-
-// Canva pins whatever sits under the cursor (or the pinch midpoint) while it
-// zooms, instead of scaling about the frame centre and letting the picture slide
-// away. anchorX/anchorY are measured from the frame centre, in frame pixels.
-function zoomAroundPoint(
-  photo: PhotoItem,
-  width: number,
-  height: number,
-  requestedZoom: number,
-  anchorX: number,
-  anchorY: number,
-) {
-  const zoom = clamp(requestedZoom, MIN_ZOOM, MAX_ZOOM);
-  const before = photoShiftRange(photo, photo.zoom, width, height);
-  const after = photoShiftRange(photo, zoom, width, height);
-  const ratio = photo.zoom > 0 ? zoom / photo.zoom : 1;
-  const shiftX = shiftFromFocus(photo.focusX, before.x) * ratio + anchorX * (1 - ratio);
-  const shiftY = shiftFromFocus(photo.focusY, before.y) * ratio + anchorY * (1 - ratio);
-  return {
-    zoom,
-    focusX: focusFromShift(shiftX, after.x),
-    focusY: focusFromShift(shiftY, after.y),
-  };
-}
-
-// Rotates a screen-space delta into the slot's own space, so tilted polaroid
-// frames still drag along the pointer rather than at an angle to it.
-function toSlotSpace(dx: number, dy: number, slot: SlotRect) {
-  const angle = -(slot.angle ?? 0);
-  return {
-    x: dx * Math.cos(angle) - dy * Math.sin(angle),
-    y: dx * Math.sin(angle) + dy * Math.cos(angle),
-  };
-}
-
 function drawPhoto(
   ctx: CanvasRenderingContext2D,
   photo: PhotoItem,
   width: number,
-  height: number,
 ) {
   const image = photo.image;
   if (!image.complete || image.naturalWidth === 0) return;
-  const { x: rangeX, y: rangeY, scale } = photoShiftRange(photo, photo.zoom, width, height);
+  const rotated = Math.abs(photo.rotation % 180) === 90;
+  const scale = width / (rotated ? image.naturalHeight : image.naturalWidth);
 
   ctx.save();
-  ctx.translate(shiftFromFocus(photo.focusX, rangeX), shiftFromFocus(photo.focusY, rangeY));
   ctx.rotate((photo.rotation * Math.PI) / 180);
   ctx.drawImage(
     image,
@@ -898,39 +791,16 @@ function drawSlot(
   const w = slot.w * size;
   const h = slot.h * size;
   const r = (slot.radius ?? 0.02) * size;
-  const isPolaroid = template.layout === "polaroid";
-  const isSeamless = template.layout === "seamless-grid";
 
   ctx.save();
   ctx.translate(x + w / 2, y + h / 2);
   ctx.rotate(slot.angle ?? 0);
 
-  // Regular templates get a clean outer border while the image cover-fills the
-  // inner frame. Polaroids keep a wider lower edge; seamless-grid deliberately
-  // removes both the border and shadow so its four photos meet edge to edge.
-  ctx.save();
-  ctx.shadowColor = isSeamless ? "transparent" : "rgba(66, 48, 37, 0.14)";
-  ctx.shadowBlur = isSeamless ? 0 : isPolaroid ? size * 0.018 : size * 0.008;
-  ctx.shadowOffsetY = isSeamless ? 0 : isPolaroid ? size * 0.008 : size * 0.003;
-  ctx.fillStyle = template.panel;
-  const frame = isSeamless ? 0 : isPolaroid ? size * 0.014 : size * 0.006;
-  const bottomFrame = isPolaroid ? size * 0.035 : frame;
-  roundedPath(
-    ctx,
-    -w / 2 - frame,
-    -h / 2 - frame,
-    w + frame * 2,
-    h + frame + bottomFrame,
-    r + frame,
-  );
-  ctx.fill();
-  ctx.restore();
-
   roundedPath(ctx, -w / 2, -h / 2, w, h, r);
   ctx.save();
   ctx.clip();
   if (photo) {
-    drawPhoto(ctx, photo, w, h);
+    drawPhoto(ctx, photo, w);
   } else {
     ctx.fillStyle = "rgba(255,255,255,0.62)";
     ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -998,50 +868,15 @@ function strokeSelection(
   ctx.restore();
 }
 
-// While a photo is being dragged or zoomed, Canva keeps the part that falls
-// outside the frame visible but dimmed, so you can see what is being cut off.
-function drawCropGhost(
-  ctx: CanvasRenderingContext2D,
-  size: number,
-  slot: SlotRect,
-  photo: PhotoItem,
-  template: TemplateSpec,
-) {
-  const w = slot.w * size;
-  const h = slot.h * size;
-  const r = (slot.radius ?? 0.02) * size;
-
-  ctx.save();
-  ctx.translate((slot.x + slot.w / 2) * size, (slot.y + slot.h / 2) * size);
-  ctx.rotate(slot.angle ?? 0);
-
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-  drawPhoto(ctx, photo, w, h);
-  ctx.restore();
-
-  // Repaint the part inside the frame at full strength.
-  ctx.save();
-  roundedPath(ctx, -w / 2, -h / 2, w, h, r);
-  ctx.clip();
-  ctx.fillStyle = template.panel;
-  ctx.fillRect(-w / 2, -h / 2, w, h);
-  drawPhoto(ctx, photo, w, h);
-  ctx.restore();
-
-  ctx.restore();
-}
-
 type DrawOptions = {
   template: TemplateSpec;
   photos: PhotoItem[];
   selectedId: string | null;
-  ghostId?: string | null;
   forExport?: boolean;
 };
 
 function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: DrawOptions) {
-  const { template, photos, selectedId, ghostId, forExport } = options;
+  const { template, photos, selectedId, forExport } = options;
   ctx.canvas.width = size;
   ctx.canvas.height = size;
   // Assigning width resets the context, so the resampling quality has to be set
@@ -1052,15 +887,11 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = template.background;
   ctx.fillRect(0, 0, size, size);
-  drawPattern(ctx, size, template);
 
   const slotCount = photos.length || template.sample;
-  const slots = getSlots(template.layout, slotCount);
+  const slots = getSlots(template.layout, slotCount, photos);
   slots.forEach((slot, index) => drawSlot(ctx, size, slot, photos[index], template, index));
 
-  // Requested export order: base colour/pattern -> full photo frames -> decoration.
-  // The transparent centre preserves the main photo while edge illustrations sit
-  // naturally over the outer crop, like a physical scrapbook sticker layer.
   if (template.overlay) {
     const overlay = overlayCache.get(template.overlay);
     if (overlay?.complete && overlay.naturalWidth > 0) {
@@ -1068,15 +899,6 @@ function drawComposition(ctx: CanvasRenderingContext2D, size: number, options: D
       const drawn = size * scale;
       const inset = (size - drawn) / 2;
       ctx.drawImage(overlay, inset, inset + offsetY * size, drawn, drawn);
-    }
-  }
-
-  // Editing affordances stay above everything and never reach the export.
-  if (!forExport && ghostId) {
-    const ghostIndex = photos.findIndex((photo) => photo.id === ghostId);
-    const ghostPhoto = photos[ghostIndex];
-    if (ghostPhoto && slots[ghostIndex]) {
-      drawCropGhost(ctx, size, slots[ghostIndex], ghostPhoto, template);
     }
   }
 
@@ -1123,14 +945,10 @@ function TemplateMini({ template, active }: { template: TemplateSpec; active: bo
       aria-hidden="true"
     >
       {template.overlay && decoration ? (
-        <span
-          className="template-mini-overlay"
-          style={{
-            backgroundImage: `url(${overlayThumbUrl(template.overlay)})`,
-            // Mirrors the canvas transform: scale about the centre, then nudge down.
-            transform: `translateY(${decoration.offsetY * 100}%) scale(${decoration.scale})`,
-          }}
-        />
+        <span className="template-mini-overlay" style={{
+          backgroundImage: `url(${overlayThumbUrl(template.overlay)})`,
+          transform: `translateY(${decoration.offsetY * 100}%) scale(${decoration.scale})`,
+        }} />
       ) : null}
       {slots.map((slot, index) => (
         <span
@@ -1180,9 +998,9 @@ async function fileToPhoto(file: File): Promise<PhotoItem> {
     name: file.name,
     url,
     image,
-    zoom: 1,
-    focusX: 0.5,
-    focusY: 0.5,
+    frameScale: 1,
+    offsetX: 0,
+    offsetY: 0,
     rotation: 0,
   };
 }
@@ -1250,8 +1068,6 @@ export default function Home() {
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState("spring-garden");
   const [dropActive, setDropActive] = useState(false);
-  // Which photo is mid-gesture, so the canvas can ghost what falls outside it.
-  const [gesturePhotoId, setGesturePhotoId] = useState<string | null>(null);
   const [assetVersion, setAssetVersion] = useState(0);
 
   const template = useMemo(
@@ -1261,20 +1077,17 @@ export default function Home() {
   const selectedIndex = photos.findIndex((photo) => photo.id === selectedPhotoId);
   const selectedPhoto = selectedIndex >= 0 ? photos[selectedIndex] : undefined;
   const slotCount = photos.length || template.sample;
-  const slots = useMemo(() => getSlots(template.layout, slotCount), [template.layout, slotCount]);
+  const slots = useMemo(() => getSlots(template.layout, slotCount, photos), [template.layout, slotCount, photos]);
   const templateIsAdapted =
     photos.length > 0 && (photos.length < template.min || photos.length > template.max);
 
   useEffect(() => {
-    const decoration = template.overlay;
-    if (!decoration || overlayCache.has(decoration)) return;
+    if (!template.overlay || overlayCache.has(template.overlay)) return;
     let active = true;
-    void loadOverlay(decoration).then((image) => {
+    void loadOverlay(template.overlay).then((image) => {
       if (active && image) setAssetVersion((version) => version + 1);
     });
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [template.overlay]);
 
   useEffect(() => {
@@ -1289,9 +1102,8 @@ export default function Home() {
       template,
       photos,
       selectedId: selectedPhotoId,
-      ghostId: gesturePhotoId,
     });
-  }, [template, photos, selectedPhotoId, gesturePhotoId, assetVersion]);
+  }, [template, photos, selectedPhotoId, assetVersion]);
 
   useEffect(() => {
     return () => objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -1324,26 +1136,10 @@ export default function Home() {
       // driven by the raw delta so a trackpad glides where a wheel steps.
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1;
       const factor = clamp(Math.exp(-event.deltaY * unit * 0.002), 0.5, 2);
-      const width = slot.w * rect.width;
-      const height = slot.h * rect.height;
-      // Keep whatever is under the cursor pinned while the zoom changes.
-      const anchor = toSlotSpace(
-        event.clientX - (rect.left + (slot.x + slot.w / 2) * rect.width),
-        event.clientY - (rect.top + (slot.y + slot.h / 2) * rect.height),
-        slot,
-      );
-
       setSelectedPhotoId(photo.id);
-      setPhotos((current) =>
-        current.map((item) =>
-          item.id === photo.id
-            ? {
-                ...item,
-                ...zoomAroundPoint(item, width, height, item.zoom * factor, anchor.x, anchor.y),
-              }
-            : item,
-        ),
-      );
+      setPhotos((current) => current.map((item) => item.id === photo.id
+        ? { ...item, frameScale: clamp(item.frameScale * factor, MIN_SCALE, MAX_SCALE) }
+        : item));
     };
 
     canvas.addEventListener("wheel", handleNativeWheel, { passive: false });
@@ -1360,7 +1156,7 @@ export default function Home() {
         {
           name: "select_growth_journal_template",
           title: "選擇成長日誌版型",
-          description: "依版型 ID 切換目前的 1:1 純照片成長日誌版型，保留照片與裁切位置。",
+          description: "依版型 ID 切換目前的 1:1 純照片成長日誌版型，保留照片與位置。",
           inputSchema: {
             type: "object",
             properties: { templateId: { type: "string", enum: TEMPLATES.map((item) => item.id) } },
@@ -1458,7 +1254,7 @@ export default function Home() {
   };
 
   const updateSelected = useCallback(
-    (changes: Partial<Pick<PhotoItem, "zoom" | "focusX" | "focusY" | "rotation">>) => {
+    (changes: Partial<Pick<PhotoItem, "frameScale" | "offsetX" | "offsetY" | "rotation">>) => {
       if (!selectedPhotoId) return;
       setPhotos((current) =>
         current.map((photo) => (photo.id === selectedPhotoId ? { ...photo, ...changes } : photo)),
@@ -1516,55 +1312,10 @@ export default function Home() {
     return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
   };
 
-  const slotFramePixels = (slot: SlotRect, rect: DOMRect) => ({
-    width: slot.w * rect.width,
-    height: slot.h * rect.height,
-  });
-
-  // Where a client point sits relative to the frame centre, in frame pixels.
-  const slotAnchor = (slot: SlotRect, clientX: number, clientY: number, rect: DOMRect) =>
-    toSlotSpace(
-      clientX - (rect.left + (slot.x + slot.w / 2) * rect.width),
-      clientY - (rect.top + (slot.y + slot.h / 2) * rect.height),
-      slot,
-    );
-
-  // Moves the photo by a screen-space delta, one-to-one with the pointer.
-  const panPhoto = (id: string, slot: SlotRect, dxPx: number, dyPx: number, rect: DOMRect) => {
-    const local = toSlotSpace(dxPx, dyPx, slot);
-    const { width, height } = slotFramePixels(slot, rect);
-    setPhotos((current) =>
-      current.map((photo) => {
-        if (photo.id !== id) return photo;
-        const range = photoShiftRange(photo, photo.zoom, width, height);
-        return {
-          ...photo,
-          focusX: focusFromShift(shiftFromFocus(photo.focusX, range.x) + local.x, range.x),
-          focusY: focusFromShift(shiftFromFocus(photo.focusY, range.y) + local.y, range.y),
-        };
-      }),
-    );
-  };
-
-  const zoomPhotoAt = (
-    id: string,
-    slot: SlotRect,
-    rect: DOMRect,
-    nextZoomFor: (zoom: number) => number,
-    anchorX: number,
-    anchorY: number,
-  ) => {
-    const { width, height } = slotFramePixels(slot, rect);
-    setPhotos((current) =>
-      current.map((photo) =>
-        photo.id === id
-          ? {
-              ...photo,
-              ...zoomAroundPoint(photo, width, height, nextZoomFor(photo.zoom), anchorX, anchorY),
-            }
-          : photo,
-      ),
-    );
+  const panPhoto = (id: string, dxPx: number, dyPx: number, rect: DOMRect) => {
+    setPhotos((current) => current.map((photo) => photo.id === id
+      ? { ...photo, offsetX: photo.offsetX + dxPx / rect.width, offsetY: photo.offsetY + dyPx / rect.height }
+      : photo));
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1591,12 +1342,11 @@ export default function Home() {
       const pinchPhoto = photos[pinchIndex];
       if (pinchPhoto) {
         setSelectedPhotoId(pinchPhoto.id);
-        setGesturePhotoId(pinchPhoto.id);
         pointerGestureRef.current = {
           mode: "pinch",
           id: pinchPhoto.id,
           startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
-          startZoom: pinchPhoto.zoom,
+          startZoom: pinchPhoto.frameScale,
         };
       }
       return;
@@ -1611,7 +1361,6 @@ export default function Home() {
       if (!rect) return;
       const centerX = rect.left + (slots[selectedIndex].x + slots[selectedIndex].w / 2) * rect.width;
       const centerY = rect.top + (slots[selectedIndex].y + slots[selectedIndex].h / 2) * rect.height;
-      setGesturePhotoId(selectedPhoto.id);
       event.currentTarget.style.cursor = handle.cursor;
       pointerGestureRef.current = {
         mode: "resize",
@@ -1620,7 +1369,7 @@ export default function Home() {
         centerX,
         centerY,
         startDistance: Math.max(1, Math.hypot(event.clientX - centerX, event.clientY - centerY)),
-        startZoom: selectedPhoto.zoom,
+        startZoom: selectedPhoto.frameScale,
       };
       return;
     }
@@ -1635,7 +1384,6 @@ export default function Home() {
       return;
     }
     setSelectedPhotoId(photo.id);
-    setGesturePhotoId(photo.id);
     pointerGestureRef.current = {
       mode: "pan",
       id: photo.id,
@@ -1671,10 +1419,9 @@ export default function Home() {
       const [first, second] = pointers;
       const distance = Math.hypot(second.x - first.x, second.y - first.y);
       const factor = distance / gesture.startDistance;
-      // Zoom about the midpoint between the fingers, so the picture stays put
-      // under them instead of sliding out from under the pinch.
-      const anchor = slotAnchor(slot, (first.x + second.x) / 2, (first.y + second.y) / 2, canvasRect);
-      zoomPhotoAt(gesture.id, slot, canvasRect, () => gesture.startZoom * factor, anchor.x, anchor.y);
+      setPhotos((current) => current.map((photo) => photo.id === gesture.id
+        ? { ...photo, frameScale: clamp(gesture.startZoom * factor, MIN_SCALE, MAX_SCALE) }
+        : photo));
       return;
     }
 
@@ -1683,14 +1430,14 @@ export default function Home() {
     if (gesture.mode === "resize") {
       const distance = Math.hypot(event.clientX - gesture.centerX, event.clientY - gesture.centerY);
       const factor = distance / gesture.startDistance;
-      // A corner handle scales about the frame centre, like resizing an element.
-      zoomPhotoAt(gesture.id, slot, canvasRect, () => gesture.startZoom * factor, 0, 0);
+      setPhotos((current) => current.map((photo) => photo.id === gesture.id
+        ? { ...photo, frameScale: clamp(gesture.startZoom * factor, MIN_SCALE, MAX_SCALE) }
+        : photo));
       return;
     }
 
     panPhoto(
       gesture.id,
-      slot,
       event.clientX - gesture.x,
       event.clientY - gesture.y,
       canvasRect,
@@ -1703,7 +1450,6 @@ export default function Home() {
     const gesture = pointerGestureRef.current;
     if (gesture?.mode === "pinch" || (gesture && gesture.pointerId === event.pointerId)) {
       pointerGestureRef.current = null;
-      setGesturePhotoId(null);
     }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1721,17 +1467,17 @@ export default function Home() {
 
     // Arrows nudge by a fixed on-screen distance, so they match dragging.
     const step = event.shiftKey ? 24 : 8;
-    if (event.key === "ArrowLeft") panPhoto(selectedPhoto.id, slot, -step, 0, rect);
-    if (event.key === "ArrowRight") panPhoto(selectedPhoto.id, slot, step, 0, rect);
-    if (event.key === "ArrowUp") panPhoto(selectedPhoto.id, slot, 0, -step, rect);
-    if (event.key === "ArrowDown") panPhoto(selectedPhoto.id, slot, 0, step, rect);
+    if (event.key === "ArrowLeft") panPhoto(selectedPhoto.id, -step, 0, rect);
+    if (event.key === "ArrowRight") panPhoto(selectedPhoto.id, step, 0, rect);
+    if (event.key === "ArrowUp") panPhoto(selectedPhoto.id, 0, -step, rect);
+    if (event.key === "ArrowDown") panPhoto(selectedPhoto.id, 0, step, rect);
 
     const zoomStep = event.shiftKey ? 1.25 : 1.1;
     if (event.key === "+" || event.key === "=") {
-      zoomPhotoAt(selectedPhoto.id, slot, rect, (zoom) => zoom * zoomStep, 0, 0);
+      updateSelected({ frameScale: clamp(selectedPhoto.frameScale * zoomStep, MIN_SCALE, MAX_SCALE) });
     }
     if (event.key === "-" || event.key === "_") {
-      zoomPhotoAt(selectedPhoto.id, slot, rect, (zoom) => zoom / zoomStep, 0, 0);
+      updateSelected({ frameScale: clamp(selectedPhoto.frameScale / zoomStep, MIN_SCALE, MAX_SCALE) });
     }
   };
 
@@ -1749,9 +1495,10 @@ export default function Home() {
       // Keep the awaits before navigator.share() to a minimum: Safari only allows
       // the share sheet while the click's user activation is still valid. No text
       // is drawn into an export, so there is no need to wait on document.fonts.
-      // Never export a half-loaded sheet: wait for the decoration before drawing.
-      if (template.overlay) await loadOverlay(template.overlay);
-
+      if (template.overlay && !(await loadOverlay(template.overlay))) {
+        toast.error("外框裝飾載入失敗，請重新選擇版型後再試");
+        return;
+      }
       const result = await encodeWithinBudget((size) => {
         const exportCanvas = document.createElement("canvas");
         const ctx = exportCanvas.getContext("2d");
@@ -1827,7 +1574,7 @@ export default function Home() {
               <ImagePlus />
             </span>
             <strong>{photos.length ? "繼續加入照片" : "選擇多張照片"}</strong>
-            <span>會自動滿版裁切，也可直接拖曳</span>
+            <span>完整保留照片，可拖曳及縮放</span>
           </label>
           <input
             ref={fileInputRef}
@@ -1909,7 +1656,7 @@ export default function Home() {
           ) : (
             <div className="empty-photo-note">
               <Images aria-hidden="true" />
-              <p>照片會鋪滿每個框，加入後仍可自由移動與縮放。</p>
+              <p>照片完整顯示，拖曳角落可調整大小。</p>
             </div>
           )}
 
@@ -1933,13 +1680,13 @@ export default function Home() {
             <div className="stage-toolbar-actions">
               <div className="stage-hint">
                 <Move aria-hidden="true" />
-                直接拖曳移動・拖角落縮放
+                拖曳移動照片・拖角落調整大小
               </div>
               {selectedPhoto ? (
                 <div className="stage-photo-actions" role="toolbar" aria-label={`調整第 ${selectedIndex + 1} 張照片`}>
                   <span className="stage-photo-label">
                     照片 {selectedIndex + 1}
-                    <output aria-live="polite">{Math.round(selectedPhoto.zoom * 100)}%</output>
+                    <output aria-live="polite">{Math.round(selectedPhoto.frameScale * 100)}%</output>
                   </span>
                   <button
                     type="button"
@@ -1952,7 +1699,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() =>
-                      updateSelected({ zoom: MIN_ZOOM, focusX: 0.5, focusY: 0.5, rotation: 0 })
+                      updateSelected({ frameScale: 1, offsetX: 0, offsetY: 0, rotation: 0 })
                     }
                     aria-label="重設照片位置與縮放"
                     title="重設"
@@ -1986,7 +1733,7 @@ export default function Home() {
               onKeyDown={handleCanvasKeyDown}
               tabIndex={0}
               role="img"
-              aria-label={`正方形成長日誌預覽，目前使用${template.name}。點選照片後可直接拖曳移動，使用滾輪、雙指或四角藍點縮放，方向鍵可微調。`}
+              aria-label={`正方形成長日誌預覽，目前使用${template.name}。點選照片後可直接拖曳移動，使用四角藍點調整大小，滾輪或雙指調整大小，方向鍵移動照片，＋或－調整大小。`}
             />
             {!photos.length ? (
               <div className="canvas-empty-action">
@@ -1994,7 +1741,7 @@ export default function Home() {
                   <Sparkles />
                 </span>
                 <strong>從今天的照片開始</strong>
-                <p>每張成品最多 4 張，照片會滿版填滿每個相框。</p>
+                <p>每張成品最多 4 張，完整照片搭配純色背景與外框裝飾。</p>
                 <Button onClick={() => fileInputRef.current?.click()}>
                   <Upload aria-hidden="true" />
                   選擇照片
